@@ -17,7 +17,7 @@
 --   2. mart.customer_analytics → Customer Analytics team
 --   3. mart.merchant_summary   → Merchant Partnerships team
 --
--- AUTHOR:  Jonah Knief (i6263747)
+-- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================
