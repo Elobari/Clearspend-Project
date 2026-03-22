@@ -1,8 +1,10 @@
 [README.md](https://github.com/user-attachments/files/26169746/README.md)
 # ClearSpend Data Pipeline
 
-**Author:** Jonah Knief (i6263747)
+**Author:** Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+
 **Course:** Data Engineering and Data Compliance
+
 **University:** Maastricht University
 
 ---
