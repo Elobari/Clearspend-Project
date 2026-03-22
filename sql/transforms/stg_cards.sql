@@ -20,7 +20,7 @@
 --   The CASE expression detects the format by regex and normalises both
 --   to Mon-YY before final parsing. Invalid dates fall through to NULL.
 --
--- AUTHOR:  Jonah Knief (i6263747)
+-- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================
