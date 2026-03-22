@@ -21,7 +21,7 @@
 --   4. FOREIGN KEYS: All FK constraints are defined to enforce referential
 --      integrity between fact and dimension tables.
 --
--- AUTHOR:  Jonah Knief (i6263747)
+-- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================
