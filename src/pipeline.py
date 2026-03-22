@@ -26,7 +26,7 @@ FAILURE BEHAVIOUR:
     Re-running the full pipeline from scratch is always safe — all DDL uses
     DROP ... CASCADE before recreating schemas.
 
-AUTHOR:     Jonah Knief (i6263747)
+AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """
