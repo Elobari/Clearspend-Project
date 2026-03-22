@@ -9,7 +9,7 @@ Tests verify:
     - Business logic correctness (e.g. refund_rate_pct is 0-100)
     - Star schema surrogate key completeness
 
-AUTHOR:     Jonah Knief (i6263747)
+AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """
