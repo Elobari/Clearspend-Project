@@ -9,7 +9,7 @@ Tests verify that:
     - Primary key columns have no nulls
     - Critical foreign key columns have no nulls
 
-AUTHOR:     Jonah Knief (i6263747)
+AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """
