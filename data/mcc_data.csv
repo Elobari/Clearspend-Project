@@ -1,0 +1,128 @@
+code,description,notes,updated_by
+1711,"heating, plumbing, air conditioning contractors",check,john
+"""3000""", Steelworks,legacy,data_team
+"""3001""",STEEL PRODUCTS MANUFACTURING,,admin
+3005,Miscellaneous Metal Fabrication,,john
+3006,Miscellaneous Fabricated Metal Products,legacy,
+3007, Coated and Laminated Products,,data_team
+3008,steel drums and barrels,,admin
+3009,FABRICATED STRUCTURAL METAL PRODUCTS,,john
+3058,"tools, parts, supplies manufacturing",old_code,john
+MCC3066,miscellaneous metals,check,system
+3075,"BOLT, NUT, SCREW, RIVET MANUFACTURING",,admin
+3132,Leather Goods,check,
+3144,Floor Covering Stores,,system
+3174,UPHOLSTERY AND DRAPERY STORES,,john
+3256,Brick Stone and Related Materials,legacy,system
+"""3260""", Pottery and Ceramics,,
+MCC3359,Non-Ferrous Metal Foundries,legacy,admin
+MCC3387," Electroplating, Plating, Polishing Services",,admin
+3389,non-precious metal services,legacy,john
+"""3390""",miscellaneous metalwork,legacy,data_team
+3393,Heat Treating Metal Services,old_code,john
+3395,Welding Repair,,system
+3405,ironwork,check,
+3504,Gardening Supplies,,data_team
+3504,Gardening Supplies,,data_team
+3509,industrial equipment and supplies,,john
+3596,MISCELLANEOUS MACHINERY AND PARTS MANUFACTURING,,system
+"""3640""",Lighting Fixtures Electrical Supplies,,john
+"""3684""",Semiconductors and Related Devices,,data_team
+3722, Passenger Railways,,admin
+3730,SHIP CHANDLERS,legacy,system
+3771,railroad passenger transport,,admin
+"""3775""",railroad freight,old_code,data_team
+"""3775""",railroad freight,old_code,data_team
+3780,computer network services,legacy,john
+4111,local and suburban commuter transportation,legacy,admin
+"""4112""", Passenger Railways,legacy,john
+4121,taxicabs and limousines,,system
+4131,Bus Lines,legacy,data_team
+4214,motor freight carriers and trucking,legacy,admin
+4411,cruise lines,legacy,system
+"""4511""",AIRLINES,legacy,
+"""4511""",AIRLINES,legacy,
+4722,travel agencies,old_code,admin
+4784,Tolls and Bridge Fees,check,data_team
+4814, Telecommunication Services,old_code,john
+4829,MONEY TRANSFER,old_code,john
+MCC4899,"Cable, Satellite, and Other Pay Television Services",,admin
+MCC4899,"Cable, Satellite, and Other Pay Television Services",,admin
+4900," Utilities - Electric, Gas, Water, Sanitary",,system
+5045,Computers Computer Peripheral Equipment,,john
+5094,Precious Stones and Metals,old_code,john
+5192,"BOOKS, PERIODICALS, NEWSPAPERS",,admin
+5193,"Florists Supplies, Nursery Stock and Flowers",,
+5211,Lumber and Building Materials,check,john
+5211,Lumber and Building Materials,check,john
+5251,Hardware Stores,old_code,john
+5251,Hardware Stores,old_code,john
+"""5261""", Lawn and Garden Supply Stores,check,data_team
+MCC5300,Wholesale Clubs,,
+"""5310""",discount stores,legacy,
+5311,Department Stores,old_code,
+5411,"Grocery Stores, Supermarkets",legacy,admin
+MCC5499,miscellaneous food stores,,john
+5533,AUTOMOTIVE PARTS AND ACCESSORIES STORES,old_code,data_team
+MCC5541,Service Stations,,admin
+MCC5541,Service Stations,,admin
+"""5621""",women's ready-to-wear stores,,john
+"""5651""",FAMILY CLOTHING STORES,legacy,system
+"""5655""","Sports Apparel, Riding Apparel Stores",check,admin
+5661,shoe stores,,data_team
+5712,"furniture, home furnishings, and equipment stores",old_code,data_team
+"""5719""",Miscellaneous Home Furnishing Stores,check,admin
+5722,Household Appliance Stores,,admin
+"""5732""",ELECTRONICS STORES,old_code,system
+5733, Music Stores - Musical Instruments,legacy,john
+5812,Eating Places and Restaurants,legacy,admin
+5813,drinking places (alcoholic beverages),,admin
+5814,fast food restaurants,,system
+5815,"DIGITAL GOODS - MEDIA, BOOKS, APPS",check,admin
+5816,Digital Goods - Games,,system
+5912,drug stores and pharmacies,old_code,john
+5921,"package stores, beer, wine, liquor",check,admin
+5932, Antique Shops,,data_team
+"""5941""", Sporting Goods Stores,check,data_team
+"""5942""",BOOK STORES,,system
+MCC5947,"Gift, Card, Novelty Stores",legacy,system
+MCC5970,"ARTIST SUPPLY STORES, CRAFT SHOPS",legacy,data_team
+5977,Cosmetic Stores,old_code,admin
+5977,Cosmetic Stores,old_code,admin
+"""6300""","INSURANCE SALES, UNDERWRITING",check,
+7011,"lodging - hotels, motels, resorts",,system
+7210,LAUNDRY SERVICES,,john
+"""7230""",Beauty and Barber Shops,check,data_team
+7276,tax preparation services,legacy,john
+MCC7349,CLEANING AND MAINTENANCE SERVICES,,admin
+7393,"DETECTIVE AGENCIES, SECURITY SERVICES",,admin
+"""7531""",Automotive Body Repair Shops,check,data_team
+7538,automotive service shops,check,data_team
+7542,Car Washes,,john
+7549,Towing Services,old_code,system
+"""7801""","Athletic Fields, Commercial Sports",old_code,data_team
+"""7801""","Athletic Fields, Commercial Sports",old_code,data_team
+7802," Recreational Sports, Clubs",old_code,data_team
+7832,MOTION PICTURE THEATERS,legacy,system
+MCC7922,Theatrical Producers,,admin
+MCC7922,Theatrical Producers,,admin
+7995,"betting (including lottery tickets, casinos)",,john
+7996,"amusement parks, carnivals, circuses",,system
+"""8011""","DOCTORS, PHYSICIANS",old_code,data_team
+"""8011""","DOCTORS, PHYSICIANS",old_code,data_team
+MCC8021,dentists and orthodontists,old_code,
+MCC8021,dentists and orthodontists,old_code,
+8041,Chiropractors,,data_team
+8041,Chiropractors,,data_team
+8043,"optometrists, optical goods and eyeglasses",,john
+MCC8049,Podiatrists,,system
+8062, Hospitals,old_code,
+8099, Medical Services,legacy,
+8099, Medical Services,legacy,
+MCC8111,LEGAL SERVICES AND ATTORNEYS,legacy,
+8931,"Accounting, Auditing, and Bookkeeping Services",legacy,admin
+8931,"Accounting, Auditing, and Bookkeeping Services",legacy,admin
+9402, Postal Services - Government Only,old_code,system
+9402, Postal Services - Government Only,old_code,system
+NOTE,dataset updated 2023,,
+COMMENT,temporary classification,,

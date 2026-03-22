@@ -1,0 +1,22 @@
+# Environment — never commit credentials
+.env
+
+# Source data — too large for version control
+data/raw/
+data/rejected/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+data/transactions_data.csv
