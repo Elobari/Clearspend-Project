@@ -16,7 +16,7 @@
 --   dw    → clean star schema (02_dw_schema.sql)
 --   mart  → business views    (03_mart_schema.sql)
 --
--- AUTHOR:  Jonah Knief (i6263747)
+-- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================
