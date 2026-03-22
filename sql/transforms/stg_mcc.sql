@@ -17,7 +17,7 @@
 --   This handles source rows where different format variants of the same
 --   code (e.g. '3504' and '"3504"') would otherwise produce duplicates.
 --
--- AUTHOR:  Jonah Knief (i6263747)
+-- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================
