@@ -28,7 +28,14 @@ import os
 import io
 import json
 import logging
+import sys
 import pandas as pd
+
+# Force UTF-8 console output on all platforms (Windows defaults to cp1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
@@ -133,7 +140,7 @@ PK_COLUMNS = {
 def execute_ddl(ddl_path: str) -> None:
     """Execute a SQL DDL file to (re)create the raw schema."""
     log.info(f"Executing DDL: {ddl_path}")
-    with open(ddl_path, "r") as f:
+    with open(ddl_path, "r", encoding="utf-8") as f:
         sql = f.read()
     with engine.connect() as conn:
         statements = [s.strip() for s in sql.split(";") if s.strip()]
@@ -196,7 +203,7 @@ def load_file(table_name: str, file_path: str) -> None:
     log.info(f"Loading '{table_name}' from {file_path}")
 
     try:
-        df = pd.read_csv(file_path, dtype=DTYPES.get(table_name, {}), low_memory=False)
+        df = pd.read_csv(file_path, dtype=DTYPES.get(table_name, {}), low_memory=False, encoding="utf-8-sig")
         log.info(f"  Read {len(df):,} rows, {len(df.columns)} columns")
 
         # Drop columns marked for exclusion (e.g. mcc.notes, mcc.updated_by)

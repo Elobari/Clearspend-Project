@@ -34,9 +34,16 @@ UNIVERSITY: Maastricht University
 """
 
 import os
+import sys
 import logging
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+
+# Force UTF-8 console output on all platforms (Windows defaults to cp1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # ---------------------------------------------------------------------------
 # LOGGING
@@ -52,7 +59,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # DATABASE CONNECTION
 # ---------------------------------------------------------------------------
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 DB_URL = (
     f"postgresql+psycopg2://"
@@ -146,7 +153,7 @@ def run_sql_file(label: str, sql_path: str) -> None:
     """
     log.info(f"  Running transform: {label}  ({os.path.basename(sql_path)})")
 
-    with open(sql_path, "r") as f:
+    with open(sql_path, "r", encoding="utf-8") as f:
         sql_content = f.read()
 
     # Split into individual statements, filtering out empty strings

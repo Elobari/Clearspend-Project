@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/26169746/README.md)
 # ClearSpend Data Pipeline
 
 **Author:** Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
@@ -125,10 +124,10 @@ clearspend/
 │   └── test_marts.py       # Layer 4 tests (mart smoke tests)
 │
 ├── data/
-│   ├── Cards_data.csv               # Raw CSV files (see note below)
+│   ├── users_data.csv               # Raw CSV files (see note below)
+│   ├── cards_data.csv
 │   ├── mcc_data.csv
-│   ├── user_data.csv
-│   └── transaction_data.csv
+│   └── transactions_data.csv        # NOT in repo — too large for GitHub (see Data Files)
 │
 ├── .env                   # Database credentials (not committed)
 ├── requirements.txt
@@ -141,7 +140,7 @@ clearspend/
 
 > **Note:** `transactions_data.csv` (~13.3 million rows) is **not included in this repository** due to GitHub's file size limits. The remaining raw files (`users_data.csv`, `cards_data.csv`, `mcc_data.csv`) are included.
 
-To run the pipeline you will need to obtain `transactions_data.csv` separately and place it in `data/raw/`.
+To run the pipeline you will need to obtain `transactions_data.csv` separately and place it in `data/`.
 
 ---
 
@@ -149,9 +148,11 @@ To run the pipeline you will need to obtain `transactions_data.csv` separately a
 
 ### Prerequisites
 
-- Python 3.10+
+- **Python 3.11 or 3.12** (recommended — see note below)
 - PostgreSQL 14+ running locally
 - A database named `clearspend` (or update `.env` accordingly)
+
+> **Python version note:** Use Python **3.11 or 3.12**. Python 3.13+ has known compatibility issues with pandas/numpy at the time of writing. Python 3.10 and below are not supported (the code uses 3.10+ type hint syntax).
 
 ### Installation
 
@@ -162,8 +163,9 @@ cd clearspend
 
 # Create and activate a virtual environment
 python -m venv .venv
-source .venv/bin/activate      # macOS/Linux
-.venv\Scripts\activate         # Windows
+source .venv/bin/activate           # macOS/Linux
+.venv\Scripts\activate              # Windows CMD
+.venv\Scripts\Activate.ps1          # Windows PowerShell
 
 # Install dependencies
 pip install -r requirements.txt
@@ -219,6 +221,19 @@ pytest tests/test_marts.py       -v
 
 ---
 
+## Cross-Platform Compatibility
+
+The pipeline is tested on **macOS and Windows 10/11** and is designed to run identically on both.
+
+| Issue | Solution |
+|---|---|
+| Windows console defaults to `cp1252` (e.g. German locale), crashing on the `╔ ║ ╚` characters in log output | `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` is called at the top of every module before any logging |
+| SQL files contain UTF-8 characters (`—` em-dash in comments) | All `open()` calls use `encoding="utf-8"` explicitly |
+| CSV files saved by Excel on Windows may have a UTF-8 BOM header | `pd.read_csv(..., encoding="utf-8-sig")` handles both BOM and non-BOM UTF-8 transparently |
+| `.env` file not found when running from a non-root directory | All modules use `load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))` with an explicit absolute-relative path rather than relying on the working directory |
+
+---
+
 ## Key Design Decisions
 
 - **SCD Type 2** on `dim_customers` tracks changes to `yearly_income` and `employment_status` over time, enabling accurate point-in-time LTV calculations.
@@ -226,6 +241,8 @@ pytest tests/test_marts.py       -v
 - **Server-side SQL INSERT** for `fact_transactions` — joining 13M rows entirely inside PostgreSQL avoids pulling data into Python and back.
 - **`DISTINCT ON (merchant_id)`** in the merchant staging query ensures exactly one row per merchant, preventing unique constraint violations from merchants appearing in multiple cities.
 - **`TEXT` columns** for uncontrolled string fields (`merchant_city`, `merchant_state`, `mcc_description`) — avoids `StringDataRightTruncation` errors from unexpectedly long source values.
+- **Deduplication before dimension inserts** — source data contains duplicate `client_id` and `card_id` rows; these are removed before loading to enforce the one-row-per-key invariant and prevent fact table fan-out.
+- **UTF-8 enforced at process startup** — `sys.stdout.reconfigure` is called before any logging to ensure correct output on Windows systems with non-UTF-8 locale encodings (e.g. `cp1252` on German Windows).
 
 ---
 

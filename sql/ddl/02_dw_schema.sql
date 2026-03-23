@@ -178,8 +178,8 @@ CREATE TABLE dw.dim_cards (
     issuer_risk_rating   VARCHAR(20)
 );
 
-CREATE INDEX idx_dim_cards_card_id   ON dw.dim_cards (card_id);
-CREATE INDEX idx_dim_cards_client_id ON dw.dim_cards (client_id);
+CREATE UNIQUE INDEX idx_dim_cards_card_id ON dw.dim_cards (card_id);
+CREATE INDEX idx_dim_cards_client_id        ON dw.dim_cards (client_id);
 
 
 -- -----------------------------------------------------------------------------

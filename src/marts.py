@@ -29,9 +29,16 @@ UNIVERSITY: Maastricht University
 """
 
 import os
+import sys
 import logging
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+
+# Force UTF-8 console output on all platforms (Windows defaults to cp1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # ---------------------------------------------------------------------------
 # LOGGING
@@ -47,7 +54,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # DATABASE CONNECTION
 # ---------------------------------------------------------------------------
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 DB_URL = (
     f"postgresql+psycopg2://"
@@ -122,7 +129,7 @@ def execute_mart_ddl() -> None:
     """
     log.info(f"\nCreating mart schema from: {DDL_PATH}")
 
-    with open(DDL_PATH, "r") as f:
+    with open(DDL_PATH, "r", encoding="utf-8") as f:
         sql = f.read()
 
     with engine.connect() as conn:

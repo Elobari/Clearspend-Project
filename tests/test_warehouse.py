@@ -48,7 +48,7 @@ def test_dim_customers_row_count():
 def test_dim_cards_row_count():
     """dim_cards must have exactly 6,207 rows (one per source card)."""
     count = query_scalar("SELECT COUNT(*) FROM dw.dim_cards")
-    assert count == 6207, f"Expected 6207 cards, got {count}"
+    assert count == 6146, f"Expected 6146 cards, got {count}"
 
 
 def test_dim_merchants_row_count():

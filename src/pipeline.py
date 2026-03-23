@@ -33,9 +33,22 @@ UNIVERSITY: Maastricht University
 
 import logging
 import os
+import sys
 import time
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# ENCODING — force UTF-8 on all platforms.
+# Windows defaults to the system locale encoding (e.g. cp1252 on German
+# systems), which crashes on the box-drawing characters used in log output.
+# reconfigure() is available on Python 3.7+ when stdout is a real terminal;
+# the hasattr guard keeps it safe when stdout is redirected to a file.
+# ---------------------------------------------------------------------------
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from ingest    import run_ingestion
 from transform import run_transform

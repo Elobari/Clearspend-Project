@@ -38,8 +38,15 @@ UNIVERSITY: Maastricht University
 
 import io
 import os
+import sys
 import logging
 import pandas as pd
+
+# Force UTF-8 console output on all platforms (Windows defaults to cp1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from datetime import date
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
@@ -58,7 +65,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # DATABASE CONNECTION
 # ---------------------------------------------------------------------------
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 DB_URL = (
     f"postgresql+psycopg2://"
@@ -101,7 +108,7 @@ def _parse_sql_statements(sql_content: str) -> list[str]:
 def execute_ddl(path: str) -> None:
     """Execute the dw schema DDL file (creates tables and populates dim_date)."""
     log.info(f"Executing DW DDL: {path}")
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         sql = f.read()
     with engine.connect() as conn:
         for stmt in _parse_sql_statements(sql):
@@ -251,6 +258,18 @@ def load_dim_cards() -> None:
 
     stg = pd.read_sql("SELECT * FROM dw.stg_cards", engine)
     log.info(f"    Staging rows: {len(stg):,}")
+
+    # Deduplicate by card_id — source data can contain duplicate card rows.
+    # Without this, the fact JOIN on card_id would fan out, producing more
+    # fact rows than source transactions.
+    before = len(stg)
+    stg = stg.drop_duplicates(subset="card_id", keep="last")
+    removed = before - len(stg)
+    if removed > 0:
+        log.info(f"    Deduplication: removed {removed:,} duplicate card_id rows "
+                 f"({before:,} → {len(stg):,} unique cards)")
+    else:
+        log.info(f"    Deduplication: no duplicates found — all {len(stg):,} rows are unique")
 
     stg.to_sql(
         "dim_cards", engine,
