@@ -62,7 +62,7 @@ DB_URL = (
     f"/{os.getenv('DB_NAME')}"
 )
 
-engine = create_engine(DB_URL, echo=False)
+engine = create_engine(DB_URL, echo=False, connect_args={"client_encoding": "utf8"})
 
 
 # ---------------------------------------------------------------------------

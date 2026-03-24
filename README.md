@@ -87,7 +87,7 @@ Three PostgreSQL view-based marts serve different business teams:
 ### Customer Analytics (`mart.customer_analytics`, `mart.suspicious_transactions`)
 - Customer lifetime value (LTV), online vs in-store spend split
 - Active card count per customer
-- Flagged suspicious transactions (duplicate amounts within 60 seconds for the same customer)
+- Flagged suspicious transactions: same customer charged the same amount more than once on the same calendar day (a common duplicate-charge and card-testing pattern). Note: the source data has date-level precision only — sub-minute windowing is not possible without a timestamp field in the source.
 
 ### Merchant Partnerships (`mart.merchant_summary`, `mart.merchant_category_growth`)
 - Transaction volume, revenue, error rate, and refund rate per merchant
@@ -236,7 +236,7 @@ The pipeline is tested on **macOS and Windows 10/11** and is designed to run ide
 
 ## Key Design Decisions
 
-- **SCD Type 2** on `dim_customers` tracks changes to `yearly_income` and `employment_status` over time, enabling accurate point-in-time LTV calculations.
+- **SCD Type 2** on `dim_customers` tracks changes to `yearly_income` and `employment_status` over time, enabling accurate point-in-time LTV calculations. Change detection uses a pandas merge; the resulting batch of changed rows is expired in a **single `UPDATE ... WHERE customer_sk = ANY(array)`** call rather than per-row loops.
 - **COPY protocol** (via `psycopg2.copy_expert`) is used for bulk dimension loads instead of row-by-row `INSERT`, giving 10–50x faster throughput.
 - **Server-side SQL INSERT** for `fact_transactions` — joining 13M rows entirely inside PostgreSQL avoids pulling data into Python and back.
 - **`DISTINCT ON (merchant_id)`** in the merchant staging query ensures exactly one row per merchant, preventing unique constraint violations from merchants appearing in multiple cities.

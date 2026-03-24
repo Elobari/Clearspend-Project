@@ -63,7 +63,7 @@ DB_URL = (
     f"/{os.getenv('DB_NAME')}"
 )
 
-engine = create_engine(DB_URL, echo=False)
+engine = create_engine(DB_URL, echo=False, connect_args={"client_encoding": "utf8"})
 
 DDL_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'sql', 'ddl', '03_mart_schema.sql'
@@ -102,7 +102,7 @@ SMOKE_TESTS = [
     },
     {
         "view":        "mart.suspicious_transactions",
-        "description": "Flagged suspicious transactions",
+        "description": "Flagged duplicate-charge transactions (same customer, amount, day)",
         "query":       "SELECT COUNT(*) AS flagged FROM mart.suspicious_transactions",
     },
     {

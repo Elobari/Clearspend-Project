@@ -48,51 +48,36 @@ SELECT
     LPAD(TRIM(card_number), 16, '0')                            AS card_number,
 
     -- -------------------------------------------------------------------------
-    -- CARD BRAND NORMALISATION
-    -- Source has 91 unique variants. Key mapping groups:
-    --   Visa:       'V', 'Visa', 'VISA', 'Vissa', 'VVisa', ' Visa' etc.
-    --   Mastercard: 'Mastercard', 'MASTERCARD', 'Master Card' etc.
-    --   Amex:       'Amex', 'American Express', 'AMEX'
-    --   Discover:   'Discover', 'DISCOVER'
-    --   Unknown:    null, anything else
-    -- -------------------------------------------------------------------------
-    CASE
-        WHEN UPPER(TRIM(card_brand)) IN ('V', 'VISA', 'VISSA', 'VVISA', 'VI')
-          OR UPPER(TRIM(card_brand)) LIKE 'VIS%'
-            THEN 'Visa'
-        WHEN UPPER(TRIM(card_brand)) LIKE '%MASTER%'
-          OR UPPER(TRIM(card_brand)) = 'MC'
-            THEN 'Mastercard'
-        WHEN UPPER(TRIM(card_brand)) LIKE '%AMEX%'
-          OR UPPER(TRIM(card_brand)) LIKE '%AMERICAN%'
-            THEN 'Amex'
-        WHEN UPPER(TRIM(card_brand)) LIKE '%DISCOVER%'
-            THEN 'Discover'
+    CASE 
+        WHEN LEFT(TRIM(UPPER(card_brand)), 1) = 'V' THEN 'Visa'
+        WHEN LEFT(TRIM(UPPER(card_brand)), 1) = 'M' THEN 'Mastercard'
+        WHEN LEFT(TRIM(UPPER(card_brand)), 1) = 'A' THEN 'Amex'
+        WHEN LEFT(TRIM(UPPER(card_brand)), 1) = 'D' THEN 'Discover'
         ELSE 'Unknown'
-    END                                                         AS card_brand,
-
+    END AS card_brand,
     -- -------------------------------------------------------------------------
+
     -- CARD TYPE NORMALISATION
-    -- Source has 60 unique variants. Key patterns:
-    --   Debit:   'Debit', 'DEBIT', 'DEB', 'DB', 'D', 'Bank Debit'
-    --   Credit:  'Credit', 'CREDIT', 'CC', 'CR', 'CRED', 'C'
-    --   Prepaid: 'Debit (Prepaid)', 'Debit (Pre payed)', 'Prepaid'
+    -- Source variants include: 'DEBIT', 'debit', 'DEBTI', 'DB', 'DEIBT', 'CREDIT', 'credit', 'CR', 'CEDIT', 'PREPAY', 'PPD', 'DPP', 'PAYED'
     --   Unknown: null, anything else
     -- Note: Prepaid check must come BEFORE Debit to avoid mis-classification
     -- -------------------------------------------------------------------------
     CASE
-        WHEN UPPER(TRIM(card_type)) LIKE '%PREPAID%'
-          OR UPPER(TRIM(card_type)) LIKE '%PRE PAY%'
-          OR UPPER(TRIM(card_type)) LIKE '%PAYED%'
+        -- 1. PREPAID: Check if the string contains a 'P' (catches PREPAY, PPD, DPP, PAYED)
+        WHEN UPPER(TRIM(card_type)) LIKE '%P%' 
             THEN 'Prepaid'
-        WHEN UPPER(TRIM(card_type)) LIKE '%DEBIT%'
-          OR UPPER(TRIM(card_type)) IN ('DEB', 'DB', 'D', 'BANK DEBIT', 'DEBIIT')
+
+        -- 2. DEBIT: Check if it starts with 'D' (catches DEBIT, DB, DEBTI, DEIBT)
+        WHEN LEFT(UPPER(TRIM(card_type)), 1) = 'D'
+        OR (UPPER(TRIM(card_type)) LIKE '%DEBIT%') -- Catch 'Bank Debit' and similar 
             THEN 'Debit'
-        WHEN UPPER(TRIM(card_type)) LIKE '%CREDIT%'
-          OR UPPER(TRIM(card_type)) IN ('CC', 'CR', 'CRED', 'C')
+
+        -- 3. CREDIT: Check if it starts with 'C' (catches CREDIT, CC, CR, CEDIT)
+        WHEN LEFT(UPPER(TRIM(card_type)), 1) = 'C' 
             THEN 'Credit'
+
         ELSE 'Unknown'
-    END                                                         AS card_type,
+    END AS card_type,
 
     -- -------------------------------------------------------------------------
     -- CREDIT LIMIT NORMALISATION
@@ -115,35 +100,38 @@ SELECT
     END)                                                        AS credit_limit,
 
     -- -------------------------------------------------------------------------
-    -- DATE FIELDS
-    -- Two source formats are observed:
-    --   Standard:  'Dec-22'    (Mon-YY)
-    --   Alternate: '01-12-22'  (DD-MM-YY)
-    -- The CASE expression detects the format by regex and normalises both
-    -- to Mon-YY before the outer TO_DATE parses them.
-    -- Values matching neither pattern (e.g. 'not available') return NULL.
+    -- DATE FIELDS 
+    -- Handles: 'Dec-22', '01-12-22', '2028-01-21', '02/01/1999', 'Feb 01 1996'
     -- -------------------------------------------------------------------------
-    TO_DATE(
-        CASE
-            WHEN expires ~ '^\d{2}-\d{2}-\d{2}$'
-                THEN TO_CHAR(TO_DATE(expires, 'DD-MM-YY'), 'Mon-YY')
-            WHEN expires ~ '^[A-Za-z]{3}-\d{2}$'
-                THEN expires
-            ELSE NULL
-        END,
-        'Mon-YY'
-    )                                                           AS expires,
+    CASE 
+        WHEN TRIM(expires) ~ '^\d{2}-\d{2}-\d{2}$' THEN TO_DATE(TRIM(expires), 'DD-MM-YY')
+        WHEN TRIM(expires) ~* '^[a-z]{3}-\d{2}$'   THEN TO_DATE(TRIM(expires), 'Mon-YY')
+        ELSE NULL 
+    END AS expires,
 
-    TO_DATE(
-        CASE
-            WHEN acct_open_date ~ '^\d{2}-\d{2}-\d{2}$'
-                THEN TO_CHAR(TO_DATE(acct_open_date, 'DD-MM-YY'), 'Mon-YY')
-            WHEN acct_open_date ~ '^[A-Za-z]{3}-\d{2}$'
-                THEN acct_open_date
-            ELSE NULL
-        END,
-        'Mon-YY'
-    )                                                           AS acct_open_date,
+    CASE 
+        -- 1. Standard: '01-12-22' (DD-MM-YY)
+        WHEN TRIM(acct_open_date) ~ '^\d{2}-\d{2}-\d{2}$' 
+            THEN TO_DATE(TRIM(acct_open_date), 'DD-MM-YY')
+            
+        -- 2. Standard: 'Dec-22' (Mon-YY)
+        WHEN TRIM(acct_open_date) ~* '^[a-z]{3}-\d{2}$' 
+            THEN TO_DATE(TRIM(acct_open_date), 'Mon-YY')
+            
+        -- 3. ISO: '2028-01-21' (YYYY-MM-DD)
+        WHEN TRIM(acct_open_date) ~ '^\d{4}-\d{2}-\d{2}$' 
+            THEN TO_DATE(TRIM(acct_open_date), 'YYYY-MM-DD')
+            
+        -- 4. Slash: '02/01/1999' (MM/DD/YYYY)
+        WHEN TRIM(acct_open_date) ~ '^\d{2}/\d{2}/\d{4}$' 
+            THEN TO_DATE(TRIM(acct_open_date), 'MM/DD/YYYY')
+            
+        -- 5. Spaced: 'Feb 01 1996' (Mon DD YYYY)
+        WHEN TRIM(acct_open_date) ~* '^[a-z]{3} \d{2} \d{4}$' 
+            THEN TO_DATE(TRIM(acct_open_date), 'Mon DD YYYY')
+            
+        ELSE NULL 
+    END AS acct_open_date,
 
     -- -------------------------------------------------------------------------
     -- BOOLEAN FIELDS

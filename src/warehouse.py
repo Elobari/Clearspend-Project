@@ -74,7 +74,7 @@ DB_URL = (
     f"/{os.getenv('DB_NAME')}"
 )
 
-engine = create_engine(DB_URL, echo=False)
+engine = create_engine(DB_URL, echo=False, connect_args={"client_encoding": "utf8"})
 
 # ---------------------------------------------------------------------------
 # PATHS
@@ -220,13 +220,15 @@ def load_dim_customers() -> None:
 
             today = date.today()
 
+            # Batch UPDATE — one round-trip for all changed rows using ANY(array)
+            changed_sks = changed["customer_sk"].astype(int).tolist()
             with engine.connect() as conn:
-                for _, row in changed.iterrows():
-                    conn.execute(text("""
-                        UPDATE dw.dim_customers
-                        SET valid_to = :valid_to, is_current = FALSE
-                        WHERE customer_sk = :sk
-                    """), {"valid_to": today, "sk": int(row["customer_sk"])})
+                conn.execute(text("""
+                    UPDATE dw.dim_customers
+                    SET valid_to = :valid_to, is_current = FALSE
+                    WHERE customer_sk = ANY(:sks)
+                      AND is_current = TRUE
+                """), {"valid_to": today, "sks": changed_sks})
                 conn.commit()
 
             new_records = stg[stg["client_id"].isin(changed["client_id"])].copy()

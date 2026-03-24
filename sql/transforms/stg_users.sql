@@ -75,27 +75,16 @@ SELECT
     --
     -- Canonical values: Employed | Self-Employed | Student | Retired | Unemployed
     -- -------------------------------------------------------------------------
-    CASE
-        -- Employed (catches: 'employed', 'EMPLOYED', ' Employed', 'Empl0yed')
-        WHEN UPPER(TRIM(REGEXP_REPLACE(employment_status, '[^a-zA-Z\s\-]', 'e', 'g')))
-             LIKE '%EMPLOY%'
-         AND UPPER(TRIM(employment_status)) NOT LIKE '%SELF%'
-         AND UPPER(TRIM(employment_status)) NOT LIKE '%UN%'
-            THEN 'Employed'
-        -- Self-Employed (catches: 'self-employed', 'SELF-EMPLOYED', 'Self Employed')
-        WHEN UPPER(TRIM(employment_status)) LIKE '%SELF%'
-            THEN 'Self-Employed'
-        -- Unemployed (catches: 'Unemployed', 'UNEMPLOYED', ' Unemployed')
-        WHEN UPPER(TRIM(employment_status)) LIKE '%UNEMPLOY%'
-            THEN 'Unemployed'
-        -- Student (catches: 'Student', 'student', ' Student', 'STUDENT')
-        WHEN UPPER(TRIM(employment_status)) LIKE '%STUDENT%'
-            THEN 'Student'
-        -- Retired (catches: 'Retired', 'RETIRED', 'retired')
-        WHEN UPPER(TRIM(employment_status)) LIKE '%RETIR%'
-            THEN 'Retired'
+
+
+    CASE 
+        WHEN LEFT(TRIM(UPPER(employment_status)), 2) = 'EM' THEN 'Employed'
+        WHEN LEFT(TRIM(UPPER(employment_status)), 2) = 'SE' THEN 'Self-Employed'
+        WHEN LEFT(TRIM(UPPER(employment_status)), 2) = 'UN' THEN 'Unemployed'
+        WHEN LEFT(TRIM(UPPER(employment_status)), 2) = 'ST' THEN 'Student'
+        WHEN LEFT(TRIM(UPPER(employment_status)), 3) = 'RET' THEN 'Retired'
         ELSE 'Unknown'
-    END                                                             AS employment_status,
+    END AS employment_status,
 
     -- -------------------------------------------------------------------------
     -- EDUCATION LEVEL NORMALISATION
@@ -105,30 +94,15 @@ SELECT
     --
     -- Canonical values: Doctorate | Master | Bachelor | Associate | High School
     -- -------------------------------------------------------------------------
-    CASE
-        -- Doctorate (catches: 'Doctorate', 'DOCTORATE', 'PhD', 'Ph.D')
-        WHEN UPPER(TRIM(education_level)) LIKE '%DOCT%'
-          OR UPPER(TRIM(education_level)) LIKE '%PHD%'
-            THEN 'Doctorate'
-        -- Master (catches: 'Master Degree', 'Masters', 'MS/MA', 'Master  Degree')
-        WHEN UPPER(TRIM(education_level)) LIKE '%MASTER%'
-          OR UPPER(TRIM(education_level)) LIKE '%MS/MA%'
-          OR UPPER(TRIM(education_level)) LIKE 'MS'
-          OR UPPER(TRIM(education_level)) LIKE 'MA'
-            THEN 'Master'
-        -- Bachelor (catches: 'Bachelor Degree', "Bachelor's Degree", 'BACHELOR DEGREE',
-        --                    'Bachelor  Degree' (double space))
-        WHEN UPPER(TRIM(education_level)) LIKE '%BACH%'
-            THEN 'Bachelor'
-        -- Associate (catches: 'Associate Degree', 'ASSOCIATE DEGREE')
-        WHEN UPPER(TRIM(education_level)) LIKE '%ASSOC%'
-            THEN 'Associate'
-        -- High School (catches: 'High School', 'HIGH SCHOOL', 'high school')
-        WHEN UPPER(TRIM(education_level)) LIKE '%HIGH%'
-          OR UPPER(TRIM(education_level)) LIKE '%H.S%'
-            THEN 'High School'
+    CASE 
+        WHEN LEFT(TRIM(UPPER(education_level)), 1) = 'D' THEN 'Doctorate'
+        WHEN LEFT(TRIM(UPPER(education_level)), 1) = 'P' THEN 'Doctorate' -- Catches PhD, Ph.D
+        WHEN LEFT(TRIM(UPPER(education_level)), 1) = 'M' THEN 'Master'    -- Catches Master, MS, MA
+        WHEN LEFT(TRIM(UPPER(education_level)), 1) = 'B' THEN 'Bachelor'
+        WHEN LEFT(TRIM(UPPER(education_level)), 1) = 'A' THEN 'Associate'
+        WHEN LEFT(TRIM(UPPER(education_level)), 1) = 'H' THEN 'High School'
         ELSE 'Unknown'
-    END                                                             AS education_level
+    END AS education_level
 
 FROM raw.users
 

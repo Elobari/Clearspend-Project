@@ -65,7 +65,7 @@ SELECT
     -- Any value other than "Online Transaction" is treated as in-store.
     -- -------------------------------------------------------------------------
     CASE
-        WHEN TRIM(use_chip) = 'Online Transaction' THEN TRUE
+        WHEN TRIM(use_chip) = 'Online Transaction' THEN TRUE -- chip transaction are instore but merchant info suggest online
         ELSE FALSE
     END                                                          AS is_online,
 
@@ -97,7 +97,11 @@ SELECT
         ELSE UPPER(TRIM(merchant_state))
     END                                                          AS merchant_state,
 
-    merchant_city,
+    CASE
+        WHEN UPPER(TRIM(merchant_city)) = 'ONLINE' THEN 'ONLINE'
+        WHEN merchant_city IS NULL OR TRIM(merchant_city) = '' THEN 'UNKNOWN'
+        ELSE INITCAP(TRIM(merchant_city))
+    END                                                          AS merchant_city,
 
     -- -------------------------------------------------------------------------
     -- ZIP CODE NORMALISATION

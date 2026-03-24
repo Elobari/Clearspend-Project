@@ -249,40 +249,57 @@ ORDER BY lifetime_value DESC;
 
 CREATE VIEW mart.suspicious_transactions AS
 
-SELECT
-    ft.transaction_id,
-    ft.transaction_sk,
-    dc.client_id,
-    dd.full_date                AS transaction_date,
-    ft.amount,
-    ft.is_online,
-    dm.merchant_city,
-    dm.merchant_state,
+-- Flag transactions where the same customer charged the same amount more than
+-- once on the same calendar day. This is a common pattern for duplicate charges
+-- or card testing fraud.
+--
+-- Implementation note: the source data has only date-level precision (no time
+-- component), so a strict 60-second window cannot be enforced. Day-level
+-- deduplication is the finest granularity available.
+--
+-- Uses a window COUNT() instead of a correlated subquery for O(n) performance.
 
-    -- Label that explains why this transaction was flagged
-    'Duplicate amount within 60 seconds for same client' AS flag_reason
-
-FROM dw.fact_transactions ft
-JOIN dw.dim_customers dc ON ft.customer_sk = dc.customer_sk
-JOIN dw.dim_date      dd ON ft.date_sk     = dd.date_sk
-JOIN dw.dim_merchants dm ON ft.merchant_sk = dm.merchant_sk
-
--- Self-join to find transactions from the same customer with the same amount
--- that occurred within 60 seconds of each other
-WHERE EXISTS (
-    SELECT 1
-    FROM dw.fact_transactions ft2
-    JOIN dw.dim_customers dc2 ON ft2.customer_sk = dc2.customer_sk
-    WHERE dc2.client_id = dc.client_id
-      AND ft2.amount    = ft.amount
-      AND ft2.transaction_sk != ft.transaction_sk
-      -- The 60-second window is approximated using date_sk proximity
-      -- for sub-day precision the transaction timestamp would be needed
+WITH txn_counts AS (
+    SELECT
+        transaction_sk,
+        transaction_id,
+        customer_sk,
+        date_sk,
+        amount,
+        is_online,
+        merchant_sk,
+        -- Count how many times this customer charged this exact amount today
+        COUNT(*) OVER (
+            PARTITION BY customer_sk, date_sk, amount
+        ) AS duplicate_count
+    FROM dw.fact_transactions
+    WHERE is_refund = FALSE  -- Refunds legitimately match sale amounts — exclude
 )
 
-AND dc.is_current = TRUE
+SELECT
+    tc.transaction_id,
+    tc.transaction_sk,
+    dc.client_id,
+    dd.full_date                AS transaction_date,
+    tc.amount,
+    tc.is_online,
+    dm.merchant_city,
+    dm.merchant_state,
+    tc.duplicate_count,
 
-ORDER BY dc.client_id, ft.amount;
+    -- Explains why this transaction was flagged
+    'Same amount charged ' || tc.duplicate_count
+        || ' times on the same day for the same customer'   AS flag_reason
+
+FROM txn_counts tc
+JOIN dw.dim_customers dc ON tc.customer_sk = dc.customer_sk
+JOIN dw.dim_date      dd ON tc.date_sk     = dd.date_sk
+JOIN dw.dim_merchants dm ON tc.merchant_sk = dm.merchant_sk
+
+WHERE tc.duplicate_count > 1
+  AND dc.is_current = TRUE
+
+ORDER BY dc.client_id, dd.full_date, tc.amount;
 
 
 -- =============================================================================
@@ -371,32 +388,37 @@ WITH monthly_category_revenue AS (
     JOIN dw.dim_merchants dm ON ft.merchant_sk = dm.merchant_sk
     JOIN dw.dim_date      dd ON ft.date_sk     = dd.date_sk
     GROUP BY dm.mcc_code, dm.mcc_description, dd.year, dd.month
+),
+
+with_lag AS (
+    -- Step 2: Compute LAG exactly once — referenced twice in the final SELECT
+    SELECT
+        mcc_code,
+        mcc_description,
+        year,
+        month,
+        monthly_revenue,
+        LAG(monthly_revenue) OVER (
+            PARTITION BY mcc_code
+            ORDER BY year, month
+        ) AS prev_month_revenue
+    FROM monthly_category_revenue
 )
 
--- Step 2: Use LAG window function to compare each month to the previous month
+-- Step 3: Calculate month-over-month growth using the pre-computed LAG value
 SELECT
     mcc_code,
     mcc_description,
     year,
     month,
     monthly_revenue,
+    prev_month_revenue,
 
-    -- Previous month's revenue for the same category
-    LAG(monthly_revenue) OVER (
-        PARTITION BY mcc_code
-        ORDER BY year, month
-    ) AS prev_month_revenue,
-
-    -- Month-over-month growth as a percentage
     ROUND(
-        100.0 * (monthly_revenue - LAG(monthly_revenue) OVER (
-                    PARTITION BY mcc_code ORDER BY year, month
-                 ))
-              / NULLIF(LAG(monthly_revenue) OVER (
-                    PARTITION BY mcc_code ORDER BY year, month
-                 ), 0),
+        100.0 * (monthly_revenue - prev_month_revenue)
+              / NULLIF(prev_month_revenue, 0),
         2
     ) AS mom_growth_pct
 
-FROM monthly_category_revenue
+FROM with_lag
 ORDER BY year DESC, month DESC, monthly_revenue DESC;

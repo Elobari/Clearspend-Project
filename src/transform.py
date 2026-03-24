@@ -68,7 +68,7 @@ DB_URL = (
     f"/{os.getenv('DB_NAME')}"
 )
 
-engine = create_engine(DB_URL, echo=False)
+engine = create_engine(DB_URL, echo=False, connect_args={"client_encoding": "utf8"})
 
 
 # ---------------------------------------------------------------------------
@@ -133,8 +133,8 @@ QUALITY_CHECKS = {
          "SELECT COUNT(*) FROM dw.stg_transactions WHERE mcc_code IS NULL"),
         ("merchant_state = 'UNKNOWN' (null/blank in source)",
          "SELECT COUNT(*) FROM dw.stg_transactions WHERE merchant_state = 'UNKNOWN'"),
-        ("merchant_state = 'ONLINE' (online in source)",
-         "SELECT COUNT(*) FROM dw.stg_transactions WHERE merchant_state = 'ONLINE'"),
+        ("merchant_city = 'ONLINE' (online in source)",
+         "SELECT COUNT(*) FROM dw.stg_transactions WHERE merchant_city = 'ONLINE'"),
     ],
 }
 
