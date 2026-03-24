@@ -13,9 +13,9 @@
 --   converted to a MATERIALISED VIEW with a single ALTER statement.
 --
 -- MARTS:
---   1. mart.finance_summary    → Finance team
---   2. mart.customer_analytics → Customer Analytics team
---   3. mart.merchant_summary   → Merchant Partnerships team
+--   1. mart.finance_summary       -> Finance team
+--   2. mart.customer_analytics    -> Customer Analytics team
+--   3. mart.merchant_summary      -> Merchant Partnerships team
 --
 -- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 -- COURSE:  Data Engineering and Data Compliance
@@ -38,123 +38,138 @@ CREATE SCHEMA mart;
 -- Answers:
 --   1. What is our total revenue by month?
 --   2. What percentage of transactions are refunds?
---   3. Which states generate the most revenue?
+--   3. Which states/countries generate the most revenue?
 --   4. Which merchant categories drive the highest spending?
+--   5. How is revenue split across US / International / Online?
 -- =============================================================================
 
 CREATE VIEW mart.finance_summary AS
-
--- Monthly revenue and transaction metrics
--- Each row = one calendar month with full financial KPIs
 SELECT
     dd.year,
     dd.month,
     dd.month_name,
-
-    -- Total revenue: sum of all non-refund transactions
     SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
         AS total_revenue,
-
-    -- Total refund value: sum of all refund transactions
     SUM(CASE WHEN ft.is_refund = TRUE THEN ft.amount ELSE 0 END)
         AS total_refunds,
-
-    -- Net revenue: revenue minus refunds
     SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
     - SUM(CASE WHEN ft.is_refund = TRUE  THEN ft.amount ELSE 0 END)
         AS net_revenue,
-
-    -- Transaction counts
-    COUNT(*)                                            AS total_transactions,
-    SUM(CASE WHEN ft.is_refund = FALSE THEN 1 ELSE 0 END) AS sale_count,
-    SUM(CASE WHEN ft.is_refund = TRUE  THEN 1 ELSE 0 END) AS refund_count,
-
-    -- Refund rate as a percentage of total transactions
+    COUNT(*)                                               AS total_transactions,
+    SUM(CASE WHEN ft.is_refund = FALSE THEN 1 ELSE 0 END)  AS sale_count,
+    SUM(CASE WHEN ft.is_refund = TRUE  THEN 1 ELSE 0 END)  AS refund_count,
     ROUND(
         100.0 * SUM(CASE WHEN ft.is_refund = TRUE THEN 1 ELSE 0 END)
-              / NULLIF(COUNT(*), 0),
-        2
+              / NULLIF(COUNT(*), 0), 2
     ) AS refund_rate_pct,
-
-    -- Error rate as a percentage of total transactions
     ROUND(
         100.0 * SUM(CASE WHEN ft.is_error = TRUE THEN 1 ELSE 0 END)
-              / NULLIF(COUNT(*), 0),
-        2
+              / NULLIF(COUNT(*), 0), 2
     ) AS error_rate_pct,
-
-    -- Average transaction value (sales only, excluding refunds)
     ROUND(
-        AVG(CASE WHEN ft.is_refund = FALSE THEN ft.amount END),
-        2
+        AVG(CASE WHEN ft.is_refund = FALSE THEN ft.amount END), 2
     ) AS avg_transaction_value
-
 FROM dw.fact_transactions ft
 JOIN dw.dim_date dd ON ft.date_sk = dd.date_sk
-
 GROUP BY dd.year, dd.month, dd.month_name
 ORDER BY dd.year, dd.month;
 
 
 -- =============================================================================
--- Supporting view: Revenue by state (for Finance question 3)
+-- Supporting view: Revenue by location type (US / International / Online)
+-- New view — answers the question of how revenue splits across merchant locations.
+-- =============================================================================
+
+CREATE VIEW mart.finance_by_location AS
+SELECT
+    dm.merchant_location,
+    COUNT(*)                                                        AS total_transactions,
+    COUNT(DISTINCT ft.customer_sk)                                  AS unique_customers,
+    SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)  AS total_revenue,
+    SUM(CASE WHEN ft.is_refund = TRUE  THEN ft.amount ELSE 0 END)  AS total_refunds,
+    ROUND(
+        100.0 * SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
+              / NULLIF(SUM(SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)) OVER (), 0),
+        2
+    ) AS revenue_share_pct
+FROM dw.fact_transactions ft
+JOIN dw.dim_merchants dm ON ft.merchant_sk = dm.merchant_sk
+WHERE ft.is_refund = FALSE
+GROUP BY dm.merchant_location
+ORDER BY total_revenue DESC;
+
+
+-- =============================================================================
+-- Supporting view: Revenue by state/country
+-- merchant_location added so analysts can filter US-only or international-only.
 -- =============================================================================
 
 CREATE VIEW mart.finance_by_state AS
-
 SELECT
+    dm.merchant_location,
     dm.merchant_state,
-
     COUNT(*)                                                        AS total_transactions,
     SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)  AS total_revenue,
     SUM(CASE WHEN ft.is_refund = TRUE  THEN ft.amount ELSE 0 END)  AS total_refunds,
-
     ROUND(
         100.0 * SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
               / NULLIF(SUM(ft.amount), 0),
         2
     ) AS revenue_share_pct
-
 FROM dw.fact_transactions ft
 JOIN dw.dim_merchants dm ON ft.merchant_sk = dm.merchant_sk
-
--- Exclude ONLINE and UNKNOWN pseudo-states for geographic analysis
 WHERE dm.merchant_state NOT IN ('ONLINE', 'UNKNOWN')
   AND dm.merchant_state IS NOT NULL
-
-GROUP BY dm.merchant_state
+GROUP BY dm.merchant_location, dm.merchant_state
 ORDER BY total_revenue DESC;
 
 
 -- =============================================================================
--- Supporting view: Revenue by merchant category (for Finance question 4)
+-- Supporting view: Revenue by merchant category
 -- =============================================================================
 
 CREATE VIEW mart.finance_by_category AS
-
 SELECT
     dm.mcc_code,
     dm.mcc_description,
-
     COUNT(*)                                                       AS total_transactions,
     SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END) AS total_revenue,
-
     ROUND(
-        AVG(CASE WHEN ft.is_refund = FALSE THEN ft.amount END),
-        2
+        AVG(CASE WHEN ft.is_refund = FALSE THEN ft.amount END), 2
     ) AS avg_transaction_value,
-
-    -- Month with the highest revenue for this category
     MODE() WITHIN GROUP (ORDER BY dd.month) AS peak_month
-
 FROM dw.fact_transactions ft
 JOIN dw.dim_merchants dm ON ft.merchant_sk = dm.merchant_sk
 JOIN dw.dim_date     dd ON ft.date_sk      = dd.date_sk
-
 WHERE ft.is_refund = FALSE
   AND dm.mcc_description IS NOT NULL
-
 GROUP BY dm.mcc_code, dm.mcc_description
+ORDER BY total_revenue DESC;
+
+
+-- =============================================================================
+-- Supporting view: Revenue by ZIP code (physical US transactions only)
+-- merchant_location added for completeness — will always be 'US' here since
+-- zip IS NOT NULL filters out Online and International merchants.
+-- =============================================================================
+
+CREATE VIEW mart.finance_by_zip AS
+SELECT
+    dm.zip,
+    dm.merchant_state,
+    dm.merchant_location,
+    COUNT(*)                                                        AS total_transactions,
+    COUNT(DISTINCT ft.customer_sk)                                  AS unique_customers,
+    COUNT(DISTINCT dm.merchant_id)                                  AS unique_merchants,
+    SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)  AS total_revenue,
+    SUM(CASE WHEN ft.is_refund = TRUE  THEN ft.amount ELSE 0 END)  AS total_refunds,
+    ROUND(
+        AVG(CASE WHEN ft.is_refund = FALSE THEN ft.amount END), 2
+    ) AS avg_transaction_value
+FROM dw.fact_transactions ft
+JOIN dw.dim_merchants dm ON ft.merchant_sk = dm.merchant_sk
+WHERE dm.zip IS NOT NULL
+GROUP BY dm.zip, dm.merchant_state, dm.merchant_location
 ORDER BY total_revenue DESC;
 
 
@@ -170,7 +185,6 @@ ORDER BY total_revenue DESC;
 -- =============================================================================
 
 CREATE VIEW mart.customer_analytics AS
-
 SELECT
     dc.client_id,
     dc.gender,
@@ -178,87 +192,51 @@ SELECT
     dc.education_level,
     dc.credit_score,
     dc.yearly_income,
-
-    -- Customer Lifetime Value: total spend across all non-refund transactions
     SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
         AS lifetime_value,
-
-    -- Total refunds received
     SUM(CASE WHEN ft.is_refund = TRUE THEN ft.amount ELSE 0 END)
         AS total_refunds,
-
-    -- Net lifetime value (LTV minus refunds)
     SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
     - SUM(CASE WHEN ft.is_refund = TRUE  THEN ft.amount ELSE 0 END)
         AS net_lifetime_value,
-
-    -- Online vs in-store breakdown
     SUM(CASE WHEN ft.is_online = TRUE  AND ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
         AS online_spend,
     SUM(CASE WHEN ft.is_online = FALSE AND ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
         AS instore_spend,
-
-    -- Online spend as a percentage of total spend
     ROUND(
         100.0 * SUM(CASE WHEN ft.is_online = TRUE AND ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
               / NULLIF(SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END), 0),
         2
     ) AS online_spend_pct,
-
-    -- Transaction counts
     COUNT(*)                                                AS total_transactions,
     SUM(CASE WHEN ft.is_online = TRUE  THEN 1 ELSE 0 END)  AS online_transactions,
     SUM(CASE WHEN ft.is_online = FALSE THEN 1 ELSE 0 END)  AS instore_transactions,
-
-    -- Number of distinct cards used — proxy for active card count
     COUNT(DISTINCT ft.card_sk)                              AS distinct_cards_used,
-
-    -- Number of distinct merchants visited — measures customer breadth
     COUNT(DISTINCT ft.merchant_sk)                          AS distinct_merchants,
-
-    -- Date of first and most recent transaction
     MIN(dd.full_date)                                       AS first_transaction_date,
     MAX(dd.full_date)                                       AS last_transaction_date,
-
-    -- Customer tenure in days
     MAX(dd.full_date) - MIN(dd.full_date)                   AS tenure_days,
-
-    -- Error count — how many of this customer's transactions failed
     SUM(CASE WHEN ft.is_error = TRUE THEN 1 ELSE 0 END)    AS error_count
-
 FROM dw.fact_transactions ft
 JOIN dw.dim_customers dc ON ft.customer_sk = dc.customer_sk
 JOIN dw.dim_date      dd ON ft.date_sk     = dd.date_sk
-
--- Only use the current customer record (SCD2 — ignore historical versions)
 WHERE dc.is_current = TRUE
-
 GROUP BY
     dc.client_id, dc.gender, dc.employment_status,
     dc.education_level, dc.credit_score, dc.yearly_income
-
 ORDER BY lifetime_value DESC;
 
 
 -- =============================================================================
--- Supporting view: Suspicious transaction flags (for Customer Analytics question 4)
+-- Supporting view: Suspicious transaction flags
 --
--- Flags transactions where the same client_id made a transaction with the same
--- amount within 60 seconds — a common pattern for duplicate charges or fraud.
+-- Flags transactions where the same customer charged the same amount at the
+-- same merchant more than once on the same calendar day.
+-- merchant_sk is included in the PARTITION BY to avoid false positives where
+-- two different merchants coincidentally charge the same amount on the same day.
 -- =============================================================================
 
 CREATE VIEW mart.suspicious_transactions AS
-
--- Flag transactions where the same customer charged the same amount more than
--- once on the same calendar day. This is a common pattern for duplicate charges
--- or card testing fraud.
---
--- Implementation note: the source data has only date-level precision (no time
--- component), so a strict 60-second window cannot be enforced. Day-level
--- deduplication is the finest granularity available.
---
--- Uses a window COUNT() instead of a correlated subquery for O(n) performance.
-
 WITH txn_counts AS (
     SELECT
         transaction_sk,
@@ -268,14 +246,12 @@ WITH txn_counts AS (
         amount,
         is_online,
         merchant_sk,
-        -- Count how many times this customer charged this exact amount today
         COUNT(*) OVER (
-            PARTITION BY customer_sk, date_sk, amount
+            PARTITION BY customer_sk, date_sk, amount, merchant_sk
         ) AS duplicate_count
     FROM dw.fact_transactions
-    WHERE is_refund = FALSE  -- Refunds legitimately match sale amounts — exclude
+    WHERE is_refund = FALSE
 )
-
 SELECT
     tc.transaction_id,
     tc.transaction_sk,
@@ -283,22 +259,19 @@ SELECT
     dd.full_date                AS transaction_date,
     tc.amount,
     tc.is_online,
+    tc.merchant_sk,
     dm.merchant_city,
     dm.merchant_state,
+    dm.merchant_location,
     tc.duplicate_count,
-
-    -- Explains why this transaction was flagged
     'Same amount charged ' || tc.duplicate_count
-        || ' times on the same day for the same customer'   AS flag_reason
-
+        || ' times on the same day at the same merchant'   AS flag_reason
 FROM txn_counts tc
 JOIN dw.dim_customers dc ON tc.customer_sk = dc.customer_sk
 JOIN dw.dim_date      dd ON tc.date_sk     = dd.date_sk
 JOIN dw.dim_merchants dm ON tc.merchant_sk = dm.merchant_sk
-
 WHERE tc.duplicate_count > 1
   AND dc.is_current = TRUE
-
 ORDER BY dc.client_id, dd.full_date, tc.amount;
 
 
@@ -311,73 +284,53 @@ ORDER BY dc.client_id, dd.full_date, tc.amount;
 --   2. What industries are growing the fastest?
 --   3. Which merchants have the highest error rates?
 --   4. How is revenue distributed geographically?
+-- merchant_location added so Merchant Partnerships can filter by US /
+-- International / Online without needing to know the state coding convention.
 -- =============================================================================
 
 CREATE VIEW mart.merchant_summary AS
-
 SELECT
     dm.merchant_id,
+    dm.merchant_location,
     dm.merchant_city,
     dm.merchant_state,
     dm.mcc_code,
     dm.mcc_description,
-
-    -- Transaction volume and value
     COUNT(*)                                                       AS total_transactions,
     SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END) AS total_revenue,
     SUM(CASE WHEN ft.is_refund = TRUE  THEN ft.amount ELSE 0 END) AS total_refunds,
-
-    -- Net revenue
     SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
     - SUM(CASE WHEN ft.is_refund = TRUE  THEN ft.amount ELSE 0 END)
         AS net_revenue,
-
-    -- Average transaction value
     ROUND(
-        AVG(CASE WHEN ft.is_refund = FALSE THEN ft.amount END),
-        2
+        AVG(CASE WHEN ft.is_refund = FALSE THEN ft.amount END), 2
     ) AS avg_transaction_value,
-
-    -- Error rate: percentage of transactions that had an error/decline
     ROUND(
         100.0 * SUM(CASE WHEN ft.is_error = TRUE THEN 1 ELSE 0 END)
-              / NULLIF(COUNT(*), 0),
-        2
+              / NULLIF(COUNT(*), 0), 2
     ) AS error_rate_pct,
-
-    -- Refund rate per merchant
     ROUND(
         100.0 * SUM(CASE WHEN ft.is_refund = TRUE THEN 1 ELSE 0 END)
-              / NULLIF(COUNT(*), 0),
-        2
+              / NULLIF(COUNT(*), 0), 2
     ) AS refund_rate_pct,
-
-    -- Count of unique customers who transacted at this merchant
     COUNT(DISTINCT ft.customer_sk) AS unique_customers,
-
-    -- Date range of transactions at this merchant
     MIN(dd.full_date) AS first_seen,
     MAX(dd.full_date) AS last_seen
-
 FROM dw.fact_transactions ft
 JOIN dw.dim_merchants dm ON ft.merchant_sk = dm.merchant_sk
 JOIN dw.dim_date      dd ON ft.date_sk     = dd.date_sk
-
 GROUP BY
-    dm.merchant_id, dm.merchant_city, dm.merchant_state,
-    dm.mcc_code, dm.mcc_description
-
+    dm.merchant_id, dm.merchant_location, dm.merchant_city,
+    dm.merchant_state, dm.mcc_code, dm.mcc_description
 ORDER BY total_revenue DESC;
 
 
 -- =============================================================================
--- Supporting view: Month-over-month growth by industry (for Merchant question 2)
+-- Supporting view: Month-over-month growth by industry
 -- =============================================================================
 
 CREATE VIEW mart.merchant_category_growth AS
-
 WITH monthly_category_revenue AS (
-    -- Step 1: Calculate revenue per category per month
     SELECT
         dm.mcc_code,
         dm.mcc_description,
@@ -389,9 +342,7 @@ WITH monthly_category_revenue AS (
     JOIN dw.dim_date      dd ON ft.date_sk     = dd.date_sk
     GROUP BY dm.mcc_code, dm.mcc_description, dd.year, dd.month
 ),
-
 with_lag AS (
-    -- Step 2: Compute LAG exactly once — referenced twice in the final SELECT
     SELECT
         mcc_code,
         mcc_description,
@@ -404,8 +355,6 @@ with_lag AS (
         ) AS prev_month_revenue
     FROM monthly_category_revenue
 )
-
--- Step 3: Calculate month-over-month growth using the pre-computed LAG value
 SELECT
     mcc_code,
     mcc_description,
@@ -413,12 +362,14 @@ SELECT
     month,
     monthly_revenue,
     prev_month_revenue,
-
-    ROUND(
-        100.0 * (monthly_revenue - prev_month_revenue)
-              / NULLIF(prev_month_revenue, 0),
-        2
-    ) AS mom_growth_pct
-
+    CASE
+        WHEN prev_month_revenue IS NULL THEN NULL
+        WHEN prev_month_revenue < 100   THEN NULL
+        ELSE ROUND(
+            100.0 * (monthly_revenue - prev_month_revenue)
+                  / prev_month_revenue,
+            2
+        )
+    END AS mom_growth_pct
 FROM with_lag
 ORDER BY year DESC, month DESC, monthly_revenue DESC;

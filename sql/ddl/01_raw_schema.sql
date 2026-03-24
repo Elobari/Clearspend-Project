@@ -11,6 +11,10 @@
 --   This separation is critical: if a transformation bug is discovered later,
 --   we can fix the transform layer and re-run without re-importing source files.
 --
+--   Columns that are not needed analytically (e.g. mcc.notes, mcc.updated_by)
+--   are still stored here. They are simply not selected in stg_mcc.sql.
+--   This preserves full source fidelity and audit traceability.
+--
 -- SCHEMAS:
 --   raw   → typed-only staging (this file)
 --   dw    → clean star schema (02_dw_schema.sql)
@@ -35,15 +39,15 @@ CREATE SCHEMA raw;
 -- -----------------------------------------------------------------------------
 -- TABLE: raw.transactions
 --
--- Source: transaction_data.csv (~1M+ rows)
+-- Source: transaction_data.csv (~13.3M rows)
 -- Grain: one row per card swipe or online purchase
 --
 -- Known source issues handled at ingest (not cleaned here):
---   - amount:       stored as string with '$' prefix, can be negative (refunds)
---   - use_chip:     free-text string ("Swipe Transaction" / "Online Transaction")
---   - errors:       sparse column — mostly null for clean transactions
+--   - amount:         stored as string with '$' prefix, can be negative (refunds)
+--   - use_chip:       free-text string ("Swipe Transaction" / "Online Transaction")
+--   - errors:         sparse column — mostly null for clean transactions
 --   - merchant_state: "ONLINE" for e-commerce, real state codes for in-store
---   - zip:          numeric but nullable for online transactions
+--   - zip:            numeric but nullable for online transactions
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE raw.transactions (
@@ -52,12 +56,12 @@ CREATE TABLE raw.transactions (
     client_id        INTEGER,          -- FK to users (raw.users.id)
     card_id          INTEGER,          -- FK to cards (raw.cards.id)
     amount           TEXT,             -- Raw amount string: "$20.74" or "$-77.00"
-    use_chip         TEXT,             -- "Swipe Transaction" or "Online Transaction"
+    use_chip         TEXT,             -- "Swipe Transaction", "Chip Transaction", or "Online Transaction"
     merchant_id      INTEGER,          -- Merchant identifier
     merchant_city    TEXT,             -- City name or "ONLINE"
     merchant_state   TEXT,             -- US state code, "ONLINE", or null
     zip              TEXT,             -- ZIP code — kept as TEXT to preserve leading zeros
-    mcc              INTEGER,          -- Merchant Category Code — joins to raw.mcc.code
+    mcc              INTEGER,          -- Merchant Category Code — joins to raw.mcc.code (cast to TEXT for join)
     errors           TEXT              -- Error description if transaction failed, else null
 );
 
@@ -103,7 +107,8 @@ CREATE TABLE raw.users (
 -- Known source issues:
 --   - card_brand:        91 unique variants for 5 brands (Visa, Mastercard, etc.)
 --   - card_type:         60 unique variants for 4 types (Debit, Credit, Prepaid, Unknown)
---   - card_number:       stored as FLOAT in CSV, losing leading digits — kept as TEXT
+--   - card_number:       stored as FLOAT in CSV — arrives as "377303000000000." with
+--                        trailing decimal. Stored as-is in raw; decimal stripped in stg_cards.sql.
 --   - credit_limit:      mixed formats: "$24295", "21968.00", "0.1k", "ten thousand"
 --   - expires:           month-year string: "Dec-22"
 --   - issuer_risk_rating: mixed case: "Low", "LOW", "Low Risk", "Med"
@@ -114,7 +119,7 @@ CREATE TABLE raw.cards (
     client_id               INTEGER,  -- FK to raw.users.id
     card_brand              TEXT,     -- Raw: "V", "Visa", "VISA", "Vissa", "VVisa" etc.
     card_type               TEXT,     -- Raw: "Debit", "DEBIT", "DeBiT", "DB", "D" etc.
-    card_number             TEXT,     -- Stored as TEXT to preserve all 16 digits
+    card_number             TEXT,     -- Stored as TEXT, may contain trailing '.' from CSV float storage
     expires                 TEXT,     -- Raw: "Dec-22"
     cvv                     INTEGER,
     has_chip                TEXT,     -- "YES" or "NO"
@@ -138,15 +143,20 @@ CREATE TABLE raw.cards (
 --
 -- Known source issues:
 --   - code:        quoted strings ('"3000"'), MCC-prefixed ("MCC3066"), plain integers
+--                  Stored as TEXT to preserve all formats exactly as received.
+--                  Cleaned to INTEGER in stg_mcc.sql.
 --   - description: mixed case, leading/trailing whitespace
 --
--- NOTE: The 'notes' and 'updated_by' columns from the source file are intentionally
---       excluded here — they are internal ops metadata with no analytical value.
+-- NOTE: notes and updated_by are internal ops metadata with no analytical value,
+--       but they are stored here to preserve full source fidelity.
+--       They are simply not selected in stg_mcc.sql.
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE raw.mcc (
-    code         TEXT,   -- Raw code: "1711", '"3000"', "MCC3066"
-    description  TEXT    -- Raw description: " Steelworks", "STEEL PRODUCTS" etc.
+    code         TEXT,    -- Raw code: "1711", '"3000"', "MCC3066"
+    description  TEXT,    -- Raw description: " Steelworks", "STEEL PRODUCTS" etc.
+    notes        TEXT,    -- Internal ops metadata — preserved in raw, not used downstream
+    updated_by   TEXT     -- Internal ops metadata — preserved in raw, not used downstream
 );
 
 
@@ -162,10 +172,10 @@ CREATE TABLE raw.mcc (
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE raw.rejected (
-    source_table    TEXT,         -- Which source table the row came from
-    source_row      TEXT,         -- The raw row content as a JSON string
-    rejection_reason TEXT,        -- Human-readable reason (e.g. "null primary key")
-    ingested_at     TIMESTAMP DEFAULT NOW()  -- When the rejection was logged
+    source_table     TEXT,         -- Which source table the row came from
+    source_row       TEXT,         -- The raw row content as a JSON string
+    rejection_reason TEXT,         -- Human-readable reason (e.g. "null primary key")
+    ingested_at      TIMESTAMP DEFAULT NOW()  -- When the rejection was logged
 );
 
 
@@ -173,6 +183,12 @@ CREATE TABLE raw.rejected (
 -- INDEXES
 -- Added on the join columns used in the transformation layer to improve
 -- performance when reading from raw tables during transformation.
+--
+-- NOTE: raw.transactions.mcc is INTEGER and raw.mcc.code is TEXT.
+--       The index below on raw.transactions(mcc) is valid as it indexes INTEGER.
+--       Joins between the two tables require an explicit cast (t.mcc::TEXT = m.code).
+--       This is handled in the staging layer via stg_mcc.mcc_code which is already
+--       cast to INTEGER, so no direct raw-to-raw join is needed at query time.
 -- -----------------------------------------------------------------------------
 
 CREATE INDEX idx_raw_transactions_client_id  ON raw.transactions (client_id);

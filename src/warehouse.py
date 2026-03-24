@@ -284,46 +284,77 @@ def load_dim_cards() -> None:
     log_table_count("dw.dim_cards")
 
 
+
+
+
 def load_dim_merchants() -> None:
     """
-    Populate dw.dim_merchants from the distinct merchant combinations
-    in dw.stg_transactions, enriched with MCC descriptions from dw.stg_mcc.
+    Populate dw.dim_merchants from distinct merchant combinations in
+    dw.stg_transactions, enriched with MCC descriptions from dw.stg_mcc.
 
-    We build the dimension from the transactions staging table (not a separate
-    merchants source file) because the transactions data IS the merchant master.
+    GRAIN: one row per merchant_id. If the same merchant_id appears at multiple
+    zip codes or cities (chain with multiple branches), DISTINCT ON picks the
+    most informative row via ORDER BY:
+      1. merchant_state NULLS LAST  — prefer a real state over ONLINE/UNKNOWN
+      2. zip NULLS LAST             — prefer a row that has a zip code
 
-    MCC descriptions are joined from stg_mcc and stored denormalised here —
-    this is intentional star schema design to avoid a runtime lookup join on
-    every mart query.
+    ZIP: stored here as a property of the merchant location, not the transaction.
+    Enables zip-level geographic analysis from the mart layer.
+
+    MCC description is denormalised here — intentional star schema design to
+    avoid a runtime join on every mart query.
     """
     log.info("  Loading dim_merchants...")
 
-    merchants_sql = """
-        SELECT DISTINCT ON (t.merchant_id)
-            t.merchant_id,
-            t.merchant_city,
-            t.merchant_state,
-            t.mcc_code,
-            m.mcc_description
-        FROM dw.stg_transactions t
-        LEFT JOIN dw.stg_mcc m ON t.mcc_code = m.mcc_code
-        ORDER BY t.merchant_id
-    """
-    merchants = pd.read_sql(merchants_sql, engine)
-    log.info(f"    Distinct merchants: {len(merchants):,}")
-
-    null_mcc = merchants["mcc_description"].isna().sum()
-    merchants["mcc_description"] = merchants["mcc_description"].fillna("Unknown Category")
-    if null_mcc > 0:
-        log.info(f"    {null_mcc:,} merchants had no MCC match — description filled with 'Unknown Category'")
-
-    # Use COPY protocol: faster than to_sql() and handles NULL mcc_code integers
-    # correctly — COPY writes NaN as \N (PostgreSQL NULL) rather than a float,
-    # which avoids the type mismatch that breaks method="multi".
     with engine.begin() as conn:
-        copy_df_to_table(merchants, "dim_merchants", "dw", conn)
+        conn.execute(text("""
+            INSERT INTO dw.dim_merchants
+                (merchant_id, merchant_city, merchant_state, zip, mcc_code, mcc_description, merchant_location)
+            SELECT DISTINCT ON (t.merchant_id)
+                t.merchant_id,
+                t.merchant_city,
+                t.merchant_state,
+                t.zip,
+                t.mcc_code,
+                COALESCE(m.mcc_description, 'Unknown Category'),
+                CASE
+                    WHEN t.merchant_city = 'ONLINE' AND t.merchant_state = 'UNKNOWN'      THEN 'Online'
+                    WHEN LENGTH(t.merchant_state) = 2      THEN 'US'
+                    ELSE                                        'International'
+                END          
+            FROM dw.stg_transactions t
+            LEFT JOIN dw.stg_mcc m ON t.mcc_code = m.mcc_code
+            ORDER BY t.merchant_id, t.merchant_state NULLS LAST, t.zip NULLS LAST
+        """))
 
     log_table_count("dw.dim_merchants")
+
+    with engine.connect() as conn:
+        distinct_codes = conn.execute(text(
+            "SELECT COUNT(DISTINCT mcc_code) FROM dw.dim_merchants"
+        )).scalar()
+        null_mcc = conn.execute(text(
+            "SELECT COUNT(*) FROM dw.dim_merchants WHERE mcc_description = 'Unknown Category'"
+        )).scalar()
+        null_zip = conn.execute(text(
+            "SELECT COUNT(*) FROM dw.dim_merchants WHERE zip IS NULL"
+        )).scalar()
+        online = conn.execute(text(
+            "SELECT COUNT(*) FROM dw.dim_merchants WHERE merchant_city = 'ONLINE'"
+        )).scalar()
+        us           = conn.execute(text("SELECT COUNT(*) FROM dw.dim_merchants WHERE merchant_location = 'US'")).scalar()
+        international = conn.execute(text("SELECT COUNT(*) FROM dw.dim_merchants WHERE merchant_location = 'International'")).scalar()
+
+    log.info(f"    Distinct MCC codes: {distinct_codes:,}")
+    if null_mcc > 0:
+        log.warning(f"    {null_mcc:,} merchants had no MCC match — description set to 'Unknown Category'")
+    else:
+        log.info(f"    All merchants matched to an MCC description")
+    log.info(f"    NULL zip: {null_zip:,}  — expected, online and countries have no zip")
+    log.info(f"    Online merchants (no physical location): {online:,}")
+    log.info(f"    US merchants:            {us:,}")
+    log.info(f"    International merchants: {international:,}")
+    log.info(f"     NULL zip breakdown:      {online:,} online + {null_zip - online:,} international = {null_zip:,} total — all expected")
 
 
 def load_fact_transactions() -> None:

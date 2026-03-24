@@ -111,7 +111,7 @@ SELECT
     CASE
         WHEN UPPER(TRIM(merchant_state)) = 'ONLINE' THEN NULL
         WHEN zip IS NULL OR TRIM(zip) = ''          THEN NULL
-        ELSE LPAD(TRIM(zip), 5, '0')
+        ELSE LPAD(TRIM(REGEXP_REPLACE(zip, '\.0*$', '')), 5, '0')
     END                                                          AS zip,
 
     mcc                                                          AS mcc_code

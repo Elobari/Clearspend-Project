@@ -34,7 +34,7 @@ def query_scalar(sql: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# ROW COUNT TESTS
+# ROW COUNT TESTS - From Excel Row Counts
 # ---------------------------------------------------------------------------
 
 def test_raw_users_row_count():
@@ -55,7 +55,7 @@ def test_raw_mcc_row_count():
     assert count == 127, f"Expected 127 MCC rows, got {count}"
 
 
-def test_raw_transactions_not_empty():
+def test_raw_transactions_not_empty(): # 13.305.915 rows in transactions_data.csv, but we just want to check it's not empty
     """Transactions table should have rows after ingestion."""
     count = query_scalar("SELECT COUNT(*) FROM raw.transactions")
     assert count > 0, "raw.transactions is empty — ingestion may have failed"

@@ -18,11 +18,17 @@ DESIGN PHILOSOPHY (Python orchestrates, SQL defines):
     - SQL can be tested and modified independently
     - The execution order and logging are controlled here in Python
 
+REJECTION LOGGING:
+    Rows that are structurally unusable after transformation (e.g. MCC codes
+    that cannot be parsed to a valid integer) are written to raw.rejected,
+    the same table used by the ingest layer. This gives a single, complete
+    audit trail of every row discarded anywhere in the pipeline.
+
 EXECUTION ORDER:
-    1. stg_mcc.sql          — must run first; stg_transactions joins to it
+    1. stg_mcc.sql          -- must run first; stg_transactions joins to it
     2. stg_users.sql
     3. stg_cards.sql
-    4. stg_transactions.sql — runs last; joins to mcc for enrichment
+    4. stg_transactions.sql -- runs last; joins to mcc for enrichment
 
 USAGE:
     python src/transform.py                # run standalone
@@ -35,7 +41,9 @@ UNIVERSITY: Maastricht University
 
 import os
 import sys
+import json
 import logging
+import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
@@ -83,6 +91,7 @@ TRANSFORM_SCRIPTS = [
     ("Cards",            os.path.join(SQL_DIR, "stg_cards.sql")),
     ("Transactions",     os.path.join(SQL_DIR, "stg_transactions.sql")),
 ]
+
 
 # ---------------------------------------------------------------------------
 # QUALITY CHECKS
@@ -139,6 +148,76 @@ QUALITY_CHECKS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# REJECTION LOGGING
+# Writes structurally unusable rows to raw.rejected for full audit traceability.
+# Called after specific transforms where known rows are discarded.
+# ---------------------------------------------------------------------------
+
+def reject_unparseable_mcc() -> None:
+    """
+    After stg_mcc.sql runs, identify any raw.mcc rows whose code could not
+    be cleaned to a valid integer and write them to raw.rejected.
+
+    These rows are excluded from stg_mcc by the WHERE filter in stg_mcc.sql.
+    This function provides the audit trail for those dropped rows — without
+    this, they would disappear silently with no record in the pipeline.
+
+    Unparseable examples: 'NOTE', blank strings, codes with non-numeric
+    characters that survive the quote/prefix stripping.
+    """
+    unparseable_sql = """
+        SELECT code, description, notes, updated_by
+        FROM raw.mcc
+        WHERE code IS NULL
+           OR TRIM(code) = ''
+           OR REGEXP_REPLACE(
+                REGEXP_REPLACE(
+                    REPLACE(TRIM(code), '"', ''),
+                    '^[Mm][Cc][Cc]', ''
+                ),
+                '\s', '', 'g'
+              ) !~ '^\d+$'
+    """
+
+    with engine.connect() as conn:
+        rows = conn.execute(text(unparseable_sql)).fetchall()
+
+    if not rows:
+        log.info("    Unparseable MCC rows written to raw.rejected: 0")
+        return
+
+    rejected = []
+    for row in rows:
+        code, description, notes, updated_by = row
+        rejected.append({
+            "source_table":     "raw.mcc",
+            "source_row":       json.dumps({
+                "code":        code,
+                "description": description,
+                "notes":       notes,
+                "updated_by":  updated_by,
+            }, default=str),
+            "rejection_reason": (
+                "MCC code cannot be parsed to a valid integer after "
+                "stripping quotes and MCC prefix — cannot join to transactions.mcc"
+            ),
+        })
+
+    pd.DataFrame(rejected).to_sql(
+        "rejected", engine, schema="raw",
+        if_exists="append", index=False, method="multi"
+    )
+    log.warning(
+        f"    Unparseable MCC rows written to raw.rejected: {len(rejected)} "
+        f"(codes: {[r['source_row'] for r in rejected[:5]]}{'...' if len(rejected) > 5 else ''})"
+    )
+
+
+# ---------------------------------------------------------------------------
+# SQL EXECUTION
+# ---------------------------------------------------------------------------
+
 def run_sql_file(label: str, sql_path: str) -> None:
     """
     Read a SQL file and execute all statements within it.
@@ -156,16 +235,14 @@ def run_sql_file(label: str, sql_path: str) -> None:
     with open(sql_path, "r", encoding="utf-8") as f:
         sql_content = f.read()
 
-    # Split into individual statements, filtering out empty strings
-    # that result from trailing semicolons or blank lines
-    statements = [
-        s.strip()
-        for s in sql_content.split(";")
-        if s.strip() and not all(
-            line.strip() == '' or line.strip().startswith('--')
-            for line in s.strip().splitlines()
-)
+    # Strip comment lines before splitting to avoid false splits on
+    # periods or SQL-like tokens appearing inside comment blocks.
+    lines = [
+        line for line in sql_content.splitlines()
+        if line.strip() and not line.strip().startswith("--")
     ]
+    stripped_sql = "\n".join(lines)
+    statements = [s.strip() for s in stripped_sql.split(";") if s.strip()]
 
     with engine.connect() as conn:
         for stmt in statements:
@@ -178,8 +255,7 @@ def run_sql_file(label: str, sql_path: str) -> None:
 def log_quality_summary(label: str) -> None:
     """
     After a transform runs, query the resulting staging table for known
-    data quality indicators and log them in real time. This makes it
-    immediately visible how many values were unmappable, NULL, or flagged.
+    data quality indicators and log them in real time.
     """
     checks = QUALITY_CHECKS.get(label, [])
     if not checks:
@@ -189,20 +265,15 @@ def log_quality_summary(label: str) -> None:
     with engine.connect() as conn:
         for description, sql in checks:
             count = conn.execute(text(sql)).scalar()
-            # Warn on NULLs in critical fields; info for expected/mapped values
             if count > 0 and "NULL" in description and "mcc_code" not in description:
                 log.warning(f"    {description}: {count:,}")
             else:
                 log.info(f"    {description}: {count:,}")
-        print()  # blank line after each summary for readability
+        print()
 
 
 def log_row_counts() -> None:
-    """
-    After all transforms complete, log the row count of each staging table.
-    This provides a quick sanity check that the transforms ran correctly
-    and gives a baseline for data quality monitoring.
-    """
+    """Log the row count of each staging table as a post-transform sanity check."""
     staging_tables = [
         "dw.stg_mcc",
         "dw.stg_users",
@@ -218,27 +289,35 @@ def log_row_counts() -> None:
             log.info(f"    {table:<30} {count:>10,} rows")
 
 
+# ---------------------------------------------------------------------------
+# ENTRY POINT
+# ---------------------------------------------------------------------------
+
 def run_transform() -> None:
     """
     Main transformation entry point.
-    Executes all SQL transform scripts in order, then logs row counts.
+    Executes all SQL transform scripts in order, runs quality checks,
+    logs rejections, then logs final row counts.
     """
     log.info("=" * 60)
     log.info("CLEARSPEND PIPELINE — LAYER 2: TRANSFORMATION")
     log.info("=" * 60)
 
-    # Ensure the target schema exists before running any transforms
     log.info("  Ensuring schema 'dw' exists...\n")
     with engine.connect() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS dw"))
         conn.commit()
 
-    # Execute each SQL transform file in order, followed by quality checks
     for label, sql_path in TRANSFORM_SCRIPTS:
         run_sql_file(label, sql_path)
+
+        # After stg_mcc runs, capture unparseable rows into raw.rejected
+        # before logging the quality summary so the count appears in context.
+        if label == "MCC reference":
+            reject_unparseable_mcc()
+
         log_quality_summary(label)
 
-    # Log row counts as a post-transform sanity check
     log_row_counts()
 
     log.info("=" * 60)

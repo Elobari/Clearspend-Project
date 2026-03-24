@@ -8,12 +8,15 @@ RESPONSIBILITY:
     as-is (typed, but not cleaned). No business logic or transformations here.
 
 DESIGN DECISIONS:
-    - All files are loaded fully into memory — the machine has sufficient RAM.
+    - All files are loaded fully into memory — the machine should have sufficient RAM.
     - Rows that fail basic validation (null primary key) are written to
       raw.rejected rather than being silently dropped.
     - PostgreSQL COPY protocol is used for bulk inserts — much faster than
       multi-row INSERT statements.
     - The raw schema DDL is executed first to ensure tables exist before load.
+    - Column dropping and value cleaning are intentionally NOT performed here.
+      The raw schema preserves every byte from the source. All cleaning lives
+      in the SQL transform layer (sql/transforms/stg_*.sql).
 
 USAGE:
     python src/ingest.py                 # run standalone
@@ -36,6 +39,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
@@ -85,6 +89,8 @@ FILES = {
 #   - card_number must be STRING to preserve leading zeros
 #   - amount must be STRING because of the '$' prefix
 #   - zip must be STRING to preserve leading zeros (e.g. "01234")
+#   - mcc.code must be STRING because source contains '"3000"' and 'MCC3066'
+#   - mcc.notes and mcc.updated_by are loaded as-is — dropped in stg_mcc.sql
 # ---------------------------------------------------------------------------
 DTYPES = {
     "transactions": {
@@ -111,21 +117,20 @@ DTYPES = {
     "cards": {
         "id":           "Int64",
         "client_id":    "Int64",
-        "card_number":  "str",
+        "card_number":  "str",   # TEXT in raw — '377303000000000.' preserved as-is,
+                                  # trailing decimal stripped in stg_cards.sql
         "credit_limit": "str",
     },
     "mcc": {
         "code":        "str",
         "description": "str",
+        # notes and updated_by are loaded as-is and stored in raw.mcc
+        # they are omitted by stg_mcc.sql which only SELECTs code and description
     },
 }
 
-# Columns to drop on load — internal ops metadata not needed in the warehouse
-DROP_COLUMNS = {
-    "mcc": ["notes", "updated_by"],
-}
-
-# Primary key column per table — used for null PK validation
+# Primary key column per table — used for null PK validation only.
+# No other ingest-time filtering or cleaning is performed.
 PK_COLUMNS = {
     "transactions": "id",
     "users":        "id",
@@ -138,12 +143,29 @@ PK_COLUMNS = {
 # DDL
 # ---------------------------------------------------------------------------
 def execute_ddl(ddl_path: str) -> None:
-    """Execute a SQL DDL file to (re)create the raw schema."""
+    """
+    Execute a SQL DDL file to (re)create the raw schema.
+
+    Strips all single-line (--) comments before splitting on semicolons.
+    This avoids false splits caused by periods or SQL-like tokens inside
+    comment blocks, which confuse both the splitter and psycopg2.
+    """
     log.info(f"Executing DDL: {ddl_path}")
     with open(ddl_path, "r", encoding="utf-8") as f:
-        sql = f.read()
+        raw_sql = f.read()
+
+    # Strip all -- comment lines before splitting.
+    # This is safe because none of our DDL files use block (/* */) comments,
+    # and it eliminates every false-split risk from comment content.
+    lines = [
+        line for line in raw_sql.splitlines()
+        if line.strip() and not line.strip().startswith("--")
+    ]
+    stripped_sql = "\n".join(lines)
+
+    statements = [s.strip() for s in stripped_sql.split(";") if s.strip()]
+
     with engine.connect() as conn:
-        statements = [s.strip() for s in sql.split(";") if s.strip()]
         for stmt in statements:
             conn.execute(text(stmt))
         conn.commit()
@@ -152,7 +174,7 @@ def execute_ddl(ddl_path: str) -> None:
 
 # ---------------------------------------------------------------------------
 # COPY-BASED BULK INSERT
-# Uses PostgreSQL's COPY protocol — 10-50x faster than INSERT statements.
+# Uses PostgreSQL's COPY protocol — much faster than INSERT statements.
 # ---------------------------------------------------------------------------
 def copy_df_to_table(df: pd.DataFrame, table: str, schema: str, conn) -> None:
     """Stream a DataFrame into PostgreSQL using the COPY protocol."""
@@ -190,11 +212,14 @@ def load_file(table_name: str, file_path: str) -> None:
     Load a CSV file into its raw schema table.
 
     Handles all four source files uniformly:
-        - Reads the full file into memory
-        - Drops any columns marked for exclusion
-        - Validates the primary key column (rejects null PKs)
-        - Bulk loads clean rows via PostgreSQL COPY
+        - Reads the full file into memory with explicit column types
+        - Validates the primary key column (rejects null PKs to raw.rejected)
+        - Bulk loads all rows via PostgreSQL COPY
         - Writes any rejected rows to raw.rejected
+
+    No cleaning or column dropping is performed here. The raw schema is a
+    complete, unmodified copy of the source. All transformation logic lives
+    in the SQL staging layer (sql/transforms/stg_*.sql).
 
     Args:
         table_name: Target table name in the raw schema (without schema prefix)
@@ -206,23 +231,9 @@ def load_file(table_name: str, file_path: str) -> None:
         df = pd.read_csv(file_path, dtype=DTYPES.get(table_name, {}), low_memory=False, encoding="utf-8-sig")
         log.info(f"  Read {len(df):,} rows, {len(df.columns)} columns")
 
-        # Drop columns marked for exclusion (e.g. mcc.notes, mcc.updated_by)
-        cols_to_drop = [c for c in DROP_COLUMNS.get(table_name, []) if c in df.columns]
-        if cols_to_drop:
-            df.drop(columns=cols_to_drop, inplace=True)
-            log.info(f"  Dropped columns: {cols_to_drop}")
-
-        # Clean card_number: strip trailing decimal points caused by CSV float storage
-        # e.g. '377303000000000.' → '377303000000000'
-        if table_name == "cards" and "card_number" in df.columns:
-            df["card_number"] = (
-                df["card_number"]
-                .str.replace(r'\.0*$', '', regex=True)
-                .str.strip()
-            )
-            log.info("  Cleaned card_number: stripped trailing decimal points")
-        
-        # Validate primary key — reject rows where PK is null
+        # Validate primary key — reject rows where PK is null.
+        # This is the only ingest-time filter: a null PK row is structurally
+        # unusable and cannot be stored or joined in any downstream layer.
         rejected = []
         pk_col = PK_COLUMNS.get(table_name)
         if pk_col and pk_col in df.columns:
@@ -235,11 +246,6 @@ def load_file(table_name: str, file_path: str) -> None:
                         "rejection_reason": f"Null primary key in column '{pk_col}'"
                     })
                 df = df[~mask_invalid]
-
-        # Bulk load into raw schema via COPY
-        #with engine.begin() as conn:
-         #   conn.execute(text(f"TRUNCATE TABLE raw.{table_name}"))
-          #  copy_df_to_table(df, table_name, "raw", conn)
 
         # Bulk load into raw schema via COPY
         with engine.begin() as conn:

@@ -39,7 +39,6 @@ CREATE SCHEMA IF NOT EXISTS dw;
 -- foreign key constraints reference them.
 -- =============================================================================
 
-
 -- -----------------------------------------------------------------------------
 -- DIMENSION: dw.dim_date
 --
@@ -55,48 +54,56 @@ CREATE SCHEMA IF NOT EXISTS dw;
 
 DROP TABLE IF EXISTS dw.dim_date CASCADE;
 CREATE TABLE dw.dim_date (
-    date_sk         INTEGER       PRIMARY KEY,  -- YYYYMMDD integer, e.g. 20100115
+    date_sk         INTEGER       PRIMARY KEY,
     full_date       DATE          NOT NULL UNIQUE,
     year            SMALLINT      NOT NULL,
-    quarter         SMALLINT      NOT NULL,     -- 1–4
-    month           SMALLINT      NOT NULL,     -- 1–12
-    month_name      VARCHAR(10)   NOT NULL,     -- 'January', 'February' etc.
-    week            SMALLINT      NOT NULL,     -- ISO week number 1–53
-    day_of_month    SMALLINT      NOT NULL,     -- 1–31
-    day_of_week     SMALLINT      NOT NULL,     -- 1 (Mon) – 7 (Sun) ISO standard
-    day_name        VARCHAR(10)   NOT NULL,     -- 'Monday', 'Tuesday' etc.
-    is_weekend      BOOLEAN       NOT NULL,     -- True for Saturday and Sunday
-    is_month_start  BOOLEAN       NOT NULL,     -- True on the 1st of each month
-    is_month_end    BOOLEAN       NOT NULL      -- True on the last day of each month
-);
+    quarter         SMALLINT      NOT NULL,     -- 1-4
+    month           SMALLINT      NOT NULL,     -- 1-12
+    month_name      VARCHAR(10)   NOT NULL,     -- 'January' etc. — no trailing spaces (FMMonth)
+    iso_year        SMALLINT      NOT NULL,     -- ISO 8601 year — use with week, not year
+    week            SMALLINT      NOT NULL,     -- ISO week 1-53 — always pair with iso_year
+    day_of_month    SMALLINT      NOT NULL,     -- 1-31
+    day_of_week     SMALLINT      NOT NULL,     -- 1 (Mon) - 7 (Sun)
+    day_name        VARCHAR(10)   NOT NULL,     -- 'Monday' etc. — no trailing spaces (FMDay)
+    is_weekend      BOOLEAN       NOT NULL,
+    is_month_start  BOOLEAN       NOT NULL,
+    is_month_end    BOOLEAN       NOT NULL
+    );
 
--- Populate dim_date for the full analytical range 2000-01-01 to 2035-12-31.
--- Using generate_series to create every calendar date without manual inserts.
+-- FMMonth / FMDay: FM prefix suppresses padding spaces.
+-- Without FM: TO_CHAR('2010-01-01', 'Month') = 'January   ' (10 chars, padded).
+-- With FM:    TO_CHAR('2010-01-01', 'FMMonth') = 'January'   (7 chars, clean).
+-- Any WHERE month_name = 'January' query silently returns 0 rows without this fix.
+--
+-- iso_year: ISO year differs from calendar year at year boundaries.
+-- Example: 2010-01-01 is in ISO week 53 of ISO year 2009.
+-- GROUP BY year, week is WRONG for those dates — use iso_year, week instead.
 INSERT INTO dw.dim_date (
     date_sk, full_date, year, quarter, month, month_name,
-    week, day_of_month, day_of_week, day_name, is_weekend,
-    is_month_start, is_month_end
-)
+    iso_year, week, day_of_month, day_of_week, day_name,
+    is_weekend, is_month_start, is_month_end
+    )
 SELECT
-    TO_CHAR(d, 'YYYYMMDD')::INTEGER          AS date_sk,
-    d::DATE                                   AS full_date,
-    EXTRACT(YEAR    FROM d)::SMALLINT         AS year,
-    EXTRACT(QUARTER FROM d)::SMALLINT         AS quarter,
-    EXTRACT(MONTH   FROM d)::SMALLINT         AS month,
-    TO_CHAR(d, 'Month')                       AS month_name,
-    EXTRACT(WEEK    FROM d)::SMALLINT         AS week,
-    EXTRACT(DAY     FROM d)::SMALLINT         AS day_of_month,
-    EXTRACT(ISODOW  FROM d)::SMALLINT         AS day_of_week,
-    TO_CHAR(d, 'Day')                         AS day_name,
-    EXTRACT(ISODOW  FROM d) IN (6, 7)         AS is_weekend,
-    EXTRACT(DAY     FROM d) = 1               AS is_month_start,
+    TO_CHAR(d, 'YYYYMMDD')::INTEGER           AS date_sk,
+    d::DATE                                    AS full_date,
+    EXTRACT(YEAR    FROM d)::SMALLINT          AS year,
+    EXTRACT(QUARTER FROM d)::SMALLINT          AS quarter,
+    EXTRACT(MONTH   FROM d)::SMALLINT          AS month,
+    TO_CHAR(d, 'FMMonth')                      AS month_name,
+    EXTRACT(ISOYEAR FROM d)::SMALLINT          AS iso_year,
+    EXTRACT(WEEK    FROM d)::SMALLINT          AS week,
+    EXTRACT(DAY     FROM d)::SMALLINT          AS day_of_month,
+    EXTRACT(ISODOW  FROM d)::SMALLINT          AS day_of_week,
+    TO_CHAR(d, 'FMDay')                        AS day_name,
+    EXTRACT(ISODOW  FROM d) IN (6, 7)          AS is_weekend,
+    EXTRACT(DAY     FROM d) = 1                AS is_month_start,
     d = DATE_TRUNC('month', d) + INTERVAL '1 month' - INTERVAL '1 day'
-                                              AS is_month_end
+                                               AS is_month_end
 FROM generate_series(
-    '2000-01-01'::DATE,
-    '2035-12-31'::DATE,
+    '1900-01-01'::DATE,
+    '2999-12-31'::DATE,
     INTERVAL '1 day'
-) AS gs(d);
+    ) AS gs(d);
 
 
 -- -----------------------------------------------------------------------------
@@ -139,7 +146,7 @@ CREATE TABLE dw.dim_customers (
     valid_from          DATE          NOT NULL DEFAULT CURRENT_DATE,
     valid_to            DATE          DEFAULT NULL, -- NULL means this is the current record
     is_current          BOOLEAN       NOT NULL DEFAULT TRUE
-);
+    );
 
 -- Index on client_id for fast lookups when joining from fact table
 CREATE INDEX idx_dim_customers_client_id  ON dw.dim_customers (client_id);
@@ -156,7 +163,6 @@ CREATE INDEX idx_dim_customers_is_current ON dw.dim_customers (is_current);
 -- -----------------------------------------------------------------------------
 
 DROP TABLE IF EXISTS dw.dim_cards CASCADE;
--- In 02_dw_schema.sql, update these lines:
 CREATE TABLE dw.dim_cards (
     card_sk              SERIAL PRIMARY KEY,
     card_id              BIGINT NOT NULL,
@@ -176,7 +182,7 @@ CREATE TABLE dw.dim_cards (
     has_chip             BOOLEAN,
     card_on_dark_web     BOOLEAN,
     issuer_risk_rating   VARCHAR(20)
-);
+    );
 
 CREATE UNIQUE INDEX idx_dim_cards_card_id ON dw.dim_cards (card_id);
 CREATE INDEX idx_dim_cards_client_id        ON dw.dim_cards (client_id);
@@ -193,15 +199,20 @@ CREATE INDEX idx_dim_cards_client_id        ON dw.dim_cards (client_id);
 
 DROP TABLE IF EXISTS dw.dim_merchants CASCADE;
 CREATE TABLE dw.dim_merchants (
-    merchant_sk         SERIAL        PRIMARY KEY,  -- Surrogate key
-    merchant_id         INTEGER       NOT NULL,     -- Natural key from transactions
-    merchant_city       TEXT,
-    merchant_state      TEXT,                       -- US state code or 'ONLINE' or 'UNKNOWN'
-    mcc_code            INTEGER,                    -- Cleaned MCC integer code
-    mcc_description     TEXT                        -- Denormalised from mcc reference table
-);
-
+    merchant_sk         SERIAL        PRIMARY KEY,
+    merchant_id         INTEGER       NOT NULL,
+    merchant_city       TEXT,                       -- City name, 'ONLINE' for online merchants, or NULL if unknown
+    merchant_state      TEXT,                       -- US state code, Country name, or 'UNKNOWN'
+    zip                 TEXT,                       -- 5-char ZIP code, NULL for online merchants
+    mcc_code            INTEGER,
+    mcc_description     TEXT,
+    merchant_location   VARCHAR(15) NOT NULL DEFAULT 'US'
+        CHECK (merchant_location IN ('US', 'International', 'Online'))
+    );
+ 
 CREATE UNIQUE INDEX idx_dim_merchants_id ON dw.dim_merchants (merchant_id);
+CREATE INDEX idx_dim_merchants_zip       ON dw.dim_merchants (zip);
+CREATE INDEX idx_dim_merchants_state     ON dw.dim_merchants (merchant_state);
 
 
 -- =============================================================================
@@ -240,10 +251,10 @@ CREATE TABLE dw.fact_transactions (
     -- Measures
     amount              NUMERIC(12,2) NOT NULL,     -- Always positive after cleaning
     is_refund           BOOLEAN       NOT NULL DEFAULT FALSE,  -- TRUE if source amount < 0
-    is_online           BOOLEAN       NOT NULL DEFAULT FALSE,  -- TRUE if use_chip = 'Online Transaction'
+    is_online           BOOLEAN       NOT NULL DEFAULT FALSE,  -- TRUE if use_chip = 'Online Transaction' or merchant_city = 'ONLINE' ???
     is_error            BOOLEAN       NOT NULL DEFAULT FALSE,  -- TRUE if errors column was populated
-    error_type          VARCHAR(100)                -- Normalised error category, NULL if clean
-);
+    error_type          VARCHAR(100)                -- Normalised error category, NULL if clean 
+    );
 
 -- Indexes on all FK columns — critical for join performance on a large fact table
 CREATE INDEX idx_fact_date_sk     ON dw.fact_transactions (date_sk);

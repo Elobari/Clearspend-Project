@@ -1,10 +1,10 @@
 -- =============================================================================
 -- FILE:    stg_mcc.sql
--- PURPOSE: Clean and standardise raw.mcc → dw.stg_mcc
+-- PURPOSE: Clean and standardise raw.mcc -> dw.stg_mcc
 --
 -- TRANSFORMATIONS APPLIED:
---   1. code:        Strip surrounding quotes and 'MCC' prefix → INTEGER
---   2. description: Strip leading/trailing whitespace → title case
+--   1. code:        Strip surrounding quotes and 'MCC' prefix -> INTEGER
+--   2. description: Strip leading/trailing whitespace -> title case
 --
 -- WHY THIS MATTERS:
 --   The mcc code is the join key between transactions and the reference table.
@@ -16,6 +16,14 @@
 --   DISTINCT ON (mcc_code) keeps exactly one row per code after cleaning.
 --   This handles source rows where different format variants of the same
 --   code (e.g. '3504' and '"3504"') would otherwise produce duplicates.
+--   These are purely formatting artefacts of the same code, not distinct
+--   business entities, so collapsing them is appropriate in the transform layer.
+--
+-- UNPARSEABLE ROWS:
+--   Rows whose code cannot be cleaned to a valid integer (e.g. 'NOTE', blank)
+--   are excluded here via the WHERE filter. These rows are structurally
+--   unusable — they can never join to transactions.mcc — and are written to
+--   raw.rejected by transform.py immediately after this script runs.
 --
 -- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
 -- COURSE:  Data Engineering and Data Compliance
@@ -25,8 +33,8 @@
 DROP TABLE IF EXISTS dw.stg_mcc;
 
 CREATE TABLE dw.stg_mcc AS
-SELECT DISTINCT ON (mcc_code) mcc_code, mcc_description
-FROM (
+--SELECT DISTINCT ON (mcc_code) mcc_code, mcc_description
+--FROM (
     SELECT
         -- -----------------------------------------------------------------------
         -- MCC CODE NORMALISATION
@@ -59,8 +67,9 @@ FROM (
 
     FROM raw.mcc
 
-    -- Exclude rows where the code cannot be cleaned to a valid integer
-    -- (defensive filter — catches unparseable codes like 'NOTE')
+    -- Exclude rows where the code cannot be cleaned to a valid integer.
+    -- These are NOT silently dropped -- transform.py reads these same rows
+    -- after this script runs and writes them to raw.rejected for traceability.
     WHERE code IS NOT NULL
       AND TRIM(code) != ''
       AND REGEXP_REPLACE(
@@ -70,7 +79,7 @@ FROM (
             ),
             '\s', '', 'g'
           ) ~ '^\d+$'
-) cleaned
+--) cleaned
 ORDER BY mcc_code;
 
-CREATE UNIQUE INDEX idx_stg_mcc_code ON dw.stg_mcc (mcc_code);
+CREATE INDEX idx_stg_mcc_code ON dw.stg_mcc (mcc_code);

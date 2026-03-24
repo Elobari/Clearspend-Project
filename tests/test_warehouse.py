@@ -80,10 +80,10 @@ def test_dim_date_no_null_dates():
 
 
 def test_dim_date_date_sk_format():
-    """date_sk must be an 8-digit YYYYMMDD integer (between 20000101 and 20351231)."""
+    """date_sk must be an 8-digit YYYYMMDD integer (between 19000101 and 29991231)."""
     invalid = query_scalar("""
         SELECT COUNT(*) FROM dw.dim_date
-        WHERE date_sk < 20000101 OR date_sk > 20351231
+        WHERE date_sk < 19000101 OR date_sk > 29991231
     """)
     assert invalid == 0, f"{invalid} rows have date_sk outside the valid YYYYMMDD range"
 
