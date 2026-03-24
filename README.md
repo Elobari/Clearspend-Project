@@ -39,7 +39,7 @@ Layer 3 — Warehouse Build    (warehouse.py)
    │
    ▼
 Layer 4 — Data Marts    (marts.py)
-      staging → PostgreSQL views for each business team
+      warehouse → PostgreSQL views for each business team
 ```
 
 Each layer runs a dedicated test suite (pytest) after completing. The pipeline halts immediately if any test fails.
@@ -79,10 +79,12 @@ dim_customers ──── fact_transactions ──── dim_merchants
 
 Three PostgreSQL view-based marts serve different business teams:
 
-### Finance (`mart.finance_summary`, `mart.finance_by_state`, `mart.finance_by_category`)
+### Finance (`mart.finance_summary`, `mart.finance_by_location`, `mart.finance_by_state`, `mart.finance_by_category`, `mart.finance_by_zip`)
 - Monthly revenue, refund rate, error rate, average transaction value
-- Revenue breakdown by US state
-- Revenue and month-over-month growth by merchant category (MCC)
+- Revenue split by location type (US / International / Online) with share percentages
+- Revenue breakdown by US state or country
+- Revenue and peak month by merchant category (MCC)
+- Revenue by ZIP code (physical US transactions only)
 
 ### Customer Analytics (`mart.customer_analytics`, `mart.suspicious_transactions`)
 - Customer lifetime value (LTV), online vs in-store spend split
@@ -251,6 +253,7 @@ The pipeline is tested on **macOS and Windows 10/11** and is designed to run ide
 | Package | Version | Purpose |
 |---|---|---|
 | `pandas` | 3.0.1 | CSV ingestion and DataFrame manipulation |
+| `numpy` | 1.26.4 | Numerical operations (pandas dependency) |
 | `sqlalchemy` | 2.0.48 | Database connectivity and ORM |
 | `psycopg2-binary` | 2.9.11 | PostgreSQL driver (COPY protocol) |
 | `python-dotenv` | 1.2.2 | `.env` credential loading |
