@@ -40,21 +40,21 @@ def query_scalar(sql: str):
 # ---------------------------------------------------------------------------
 
 def test_dim_customers_row_count():
-    """dim_customers must have exactly 2,000 rows (2,020 source users minus 20 duplicates)."""
+    """dim_customers must have exactly 2,001 rows (2,020 source users minus 20 duplicates, plus 1 sentinel row)."""
     count = query_scalar("SELECT COUNT(*) FROM dw.dim_customers")
-    assert count == 2000, f"Expected 2000 customers, got {count}"
+    assert count == 2001, f"Expected 2001 customers, got {count}"
 
 
 def test_dim_cards_row_count():
-    """dim_cards must have exactly 6,146 rows (6,207 source cards minus 61 duplicates removed at warehouse load)."""
+    """dim_cards must have exactly 6,147 rows (6,207 source cards minus 61 duplicates, plus 1 sentinel row)."""
     count = query_scalar("SELECT COUNT(*) FROM dw.dim_cards")
-    assert count == 6146, f"Expected 6146 cards, got {count}"
+    assert count == 6147, f"Expected 6147 cards, got {count}"
 
 
 def test_dim_merchants_row_count():
-    """dim_merchants must have exactly 74,831 distinct merchants."""
+    """dim_merchants must have exactly 74,832 rows (74,831 distinct merchants, plus 1 sentinel row)."""
     count = query_scalar("SELECT COUNT(*) FROM dw.dim_merchants")
-    assert count == 74831, f"Expected 74831 merchants, got {count}"
+    assert count == 74832, f"Expected 74832 merchants, got {count}"
 
 
 def test_dim_date_row_count():
