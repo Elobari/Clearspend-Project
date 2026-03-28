@@ -17,7 +17,7 @@
 --   2. mart.customer_analytics    -> Customer Analytics team
 --   3. mart.merchant_summary      -> Merchant Partnerships team
 --
--- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+-- AUTHOR:  Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================
@@ -113,7 +113,7 @@ SELECT
     SUM(CASE WHEN ft.is_refund = TRUE  THEN ft.amount ELSE 0 END)  AS total_refunds,
     ROUND(
         100.0 * SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)
-              / NULLIF(SUM(ft.amount), 0),
+              / NULLIF(SUM(SUM(CASE WHEN ft.is_refund = FALSE THEN ft.amount ELSE 0 END)) OVER (), 0),
         2
     ) AS revenue_share_pct
 FROM dw.fact_transactions ft
@@ -373,3 +373,111 @@ SELECT
     END AS mom_growth_pct
 FROM with_lag
 ORDER BY year DESC, month DESC, monthly_revenue DESC;
+
+CREATE VIEW mart.customers_without_transactions AS
+SELECT
+    dc.client_id,
+    dc.gender,
+    dc.employment_status,
+    dc.education_level,
+    dc.yearly_income,
+    dc.credit_score,
+    dc.birth_year,
+    dc.birth_month
+FROM dw.dim_customers dc
+LEFT JOIN dw.fact_transactions ft ON dc.customer_sk = ft.customer_sk
+WHERE dc.is_current = TRUE
+  AND ft.customer_sk IS NULL;
+
+
+-- =============================================================================
+-- Supporting view: Card testing alerts (fraud detection)
+--
+-- Detects potential card testing patterns: a customer making 3+ small-amount
+-- transactions (< $10) across 2+ distinct merchants on the same calendar day.
+--
+-- Card testing is a fraud pattern where stolen card numbers are validated by
+-- running small probe charges at different merchants before escalating to
+-- high-value fraud. Unlike mart.suspicious_transactions (which detects exact
+-- duplicate charges at the same merchant), this view catches the varying-amount
+-- multi-merchant pattern that duplicate detection misses.
+--
+-- Thresholds used:
+--   amount < $10   — typical card-testing probe amount
+--   txn_count >= 3 — at least 3 transactions in one day
+--   distinct_merchants >= 2 — spread across multiple merchants (not just one)
+-- =============================================================================
+
+CREATE VIEW mart.card_testing_alerts AS
+WITH daily_small_txns AS (
+    SELECT
+        ft.customer_sk,
+        ft.card_sk,
+        ft.date_sk,
+        COUNT(*)                    AS txn_count,
+        COUNT(DISTINCT ft.merchant_sk) AS distinct_merchants,
+        SUM(ft.amount)              AS total_amount,
+        MIN(ft.amount)              AS min_amount,
+        MAX(ft.amount)              AS max_amount
+    FROM dw.fact_transactions ft
+    WHERE ft.is_refund = FALSE
+      AND ft.amount < 10.00
+    GROUP BY ft.customer_sk, ft.card_sk, ft.date_sk
+    HAVING COUNT(*) >= 3
+       AND COUNT(DISTINCT ft.merchant_sk) >= 2
+)
+SELECT
+    dc.client_id,
+    dst.card_sk,
+    dd.full_date                AS alert_date,
+    dst.txn_count,
+    dst.distinct_merchants,
+    ROUND(dst.total_amount, 2)  AS total_amount,
+    ROUND(dst.min_amount, 2)    AS min_amount,
+    ROUND(dst.max_amount, 2)    AS max_amount,
+    'Card testing pattern: ' || dst.txn_count
+        || ' small transactions ($' || ROUND(dst.min_amount, 2)
+        || '-$' || ROUND(dst.max_amount, 2)
+        || ') across ' || dst.distinct_merchants
+        || ' merchants in one day'  AS flag_reason
+FROM daily_small_txns dst
+JOIN dw.dim_customers dc ON dst.customer_sk = dc.customer_sk
+JOIN dw.dim_date      dd ON dst.date_sk     = dd.date_sk
+WHERE dc.is_current = TRUE
+ORDER BY dst.txn_count DESC, dd.full_date;
+
+
+-- =============================================================================
+-- Supporting view: Error type analysis
+--
+-- Surfaces the error_type column from fact_transactions (populated from the
+-- raw errors field during staging) as a mart-level breakdown. Enables the
+-- Customer Analytics and Merchant Partnerships teams to:
+--   - Identify the most common failure types (e.g. Insufficient Balance vs Bad PIN)
+--   - Track error trends over time per merchant or card type
+--   - Prioritise fraud investigation by error category
+--
+-- NOTE: dim_merchants is derived from observed transactions, not a separate
+-- merchant source file. Merchants with zero transactions are therefore not
+-- present in dim_merchants or any mart view — this is a known data model
+-- constraint documented in the Known Limitations section of the report.
+-- =============================================================================
+
+CREATE VIEW mart.error_analysis AS
+SELECT
+    ft.error_type,
+    COUNT(*)                            AS error_count,
+    COUNT(DISTINCT ft.customer_sk)      AS affected_customers,
+    COUNT(DISTINCT ft.merchant_sk)      AS affected_merchants,
+    ROUND(AVG(ft.amount), 2)            AS avg_transaction_amount,
+    ROUND(
+        100.0 * COUNT(*) / NULLIF(SUM(COUNT(*)) OVER (), 0), 2
+    )                                   AS error_share_pct,
+    MIN(dd.full_date)                   AS first_seen,
+    MAX(dd.full_date)                   AS last_seen
+FROM dw.fact_transactions ft
+JOIN dw.dim_date dd ON ft.date_sk = dd.date_sk
+WHERE ft.is_error = TRUE
+  AND ft.error_type IS NOT NULL
+GROUP BY ft.error_type
+ORDER BY error_count DESC;

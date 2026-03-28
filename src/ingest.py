@@ -22,7 +22,7 @@ USAGE:
     python src/ingest.py                 # run standalone
     called automatically by pipeline.py
 
-AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+AUTHOR:     Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """
@@ -40,8 +40,8 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from sqlalchemy import text
+from db import engine
 
 # ---------------------------------------------------------------------------
 # LOGGING SETUP
@@ -52,21 +52,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 log = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# DATABASE CONNECTION
-# ---------------------------------------------------------------------------
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
-
-DB_URL = (
-    f"postgresql+psycopg2://"
-    f"{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
-    f"@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}"
-    f"/{os.getenv('DB_NAME')}"
-)
-
-engine = create_engine(DB_URL, echo=False, connect_args={"client_encoding": "utf8"})
 
 
 # ---------------------------------------------------------------------------

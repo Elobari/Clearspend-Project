@@ -1,6 +1,6 @@
 # ClearSpend Data Pipeline
 
-**Author:** Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+**Authors:** Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 
 **Course:** Data Engineering and Data Compliance
 
@@ -62,7 +62,7 @@ dim_customers ──── fact_transactions ──── dim_merchants
 
 | Table | Description |
 |---|---|
-| `dw.dim_date` | Pre-populated calendar dimension (2000–2035), YYYYMMDD surrogate key |
+| `dw.dim_date` | Pre-populated calendar dimension (1900–2999), YYYYMMDD surrogate key |
 | `dw.dim_customers` | Customer demographics — **SCD Type 2** on `yearly_income` and `employment_status` |
 | `dw.dim_cards` | Card metadata (brand, type, credit limit, issuer) |
 | `dw.dim_merchants` | Merchant details with MCC category codes |
@@ -86,10 +86,17 @@ Three PostgreSQL view-based marts serve different business teams:
 - Revenue and peak month by merchant category (MCC)
 - Revenue by ZIP code (physical US transactions only)
 
-### Customer Analytics (`mart.customer_analytics`, `mart.suspicious_transactions`)
+### Customer Analytics (`mart.customer_analytics`, `mart.suspicious_transactions`, `mart.card_testing_alerts`)
 - Customer lifetime value (LTV), online vs in-store spend split
 - Active card count per customer
-- Flagged suspicious transactions: same customer charged the same amount more than once on the same calendar day (a common duplicate-charge and card-testing pattern). Note: the source data has date-level precision only — sub-minute windowing is not possible without a timestamp field in the source.
+- **Duplicate-charge detection** (`mart.suspicious_transactions`): flags same customer, same amount, same merchant, same calendar day. Note: source data has date-level precision only — sub-minute windowing is not possible without a timestamp field.
+- **Card testing detection** (`mart.card_testing_alerts`): flags customers with 3+ transactions under $10 at 2+ distinct merchants on the same day — the typical pattern of probing stolen card numbers before escalating to high-value fraud. This catches varying-amount multi-merchant patterns that the duplicate-charge view misses.
+
+### Customers without Transactions (`mart.customers_without_transactions`)
+- Lists registered customers who have never made a transaction, enabling re-engagement campaigns and identifying data quality gaps (e.g. test accounts or onboarding dropouts).
+
+### Error Analysis (`mart.error_analysis`)
+- Breaks down the `error_type` column from `fact_transactions` (populated from the raw `errors` field) by type, showing error count, affected customers and merchants, average amount, and share percentage. Enables targeted fraud and operational investigations by error category (e.g. "Insufficient Balance" vs "Bad PIN").
 
 ### Merchant Partnerships (`mart.merchant_summary`, `mart.merchant_category_growth`)
 - Transaction volume, revenue, error rate, and refund rate per merchant
@@ -245,6 +252,18 @@ The pipeline is tested on **macOS and Windows 10/11** and is designed to run ide
 - **`TEXT` columns** for uncontrolled string fields (`merchant_city`, `merchant_state`, `mcc_description`) — avoids `StringDataRightTruncation` errors from unexpectedly long source values.
 - **Deduplication before dimension inserts** — source data contains duplicate `client_id` and `card_id` rows; these are removed before loading to enforce the one-row-per-key invariant and prevent fact table fan-out.
 - **UTF-8 enforced at process startup** — `sys.stdout.reconfigure` is called before any logging to ensure correct output on Windows systems with non-UTF-8 locale encodings (e.g. `cp1252` on German Windows).
+- **Partial indexes on `fact_transactions`** — in addition to the per-FK B-tree indexes, partial indexes on `is_refund = FALSE` and `is_error = TRUE` are created. Since most mart views filter to non-refund rows (>95% of the table), the partial index reduces the scan footprint significantly for analytical queries.
+- **`dim_merchants` is transaction-derived** — merchants are not loaded from a source file; they are constructed from distinct `merchant_id` values observed in `fact_transactions`. A merchant with zero transactions will not appear in `dim_merchants` or any mart view. This is a known data model constraint; the mart views correctly reflect only merchants with observed activity.
+
+---
+
+## Known Limitations
+
+**Full refresh on every run.** Every pipeline run drops and recreates all schemas (`DROP SCHEMA ... CASCADE`), then reloads all data from scratch. For this project's dataset (~13M rows) a full run takes approximately 8 minutes. In a production setting, an incremental/delta load strategy (watermarks or Change Data Capture on the fact table) would reduce that to seconds for daily batches. The full-refresh approach is a deliberate simplification appropriate for the project scope.
+
+**Date-only precision in source data.** The `transactions_data.csv` source file stores the `date` column at day-level precision only (e.g. `2010-01-01 00:00:00` — the time component is always midnight). As a result, `mart.suspicious_transactions` and `mart.card_testing_alerts` can only flag patterns on the same *calendar day*; they cannot enforce a strict time-window (e.g. same-minute charges) that would be standard in production fraud detection. This is a source data constraint, not a pipeline design flaw.
+
+**`dim_merchants` contains only merchants with at least one transaction.** Because `dim_merchants` is derived from `stg_transactions` rather than loaded from a dedicated merchant source file, any merchant that exists in an external system but has never appeared in a transaction will not be present in the warehouse. All mart views therefore reflect only merchants with observed transaction history.
 
 ---
 

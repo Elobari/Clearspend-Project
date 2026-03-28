@@ -15,7 +15,7 @@
 --   It retains source natural keys (client_id, card_id, merchant_id) which
 --   are resolved to surrogate keys when fact_transactions is populated.
 --
--- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+-- AUTHOR:  Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================

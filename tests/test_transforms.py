@@ -10,7 +10,7 @@ Tests verify that:
     - MCC codes are valid integers after cleaning
     - No critical nulls introduced during transformation
 
-AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+AUTHOR:     Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """

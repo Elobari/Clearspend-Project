@@ -9,7 +9,7 @@ Tests verify:
     - Business logic correctness (e.g. refund_rate_pct is 0-100)
     - Star schema surrogate key completeness
 
-AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+AUTHOR:     Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """
@@ -142,3 +142,28 @@ def test_merchant_error_rate_valid_range():
         WHERE error_rate_pct < 0 OR error_rate_pct > 100
     """)
     assert invalid == 0, f"{invalid} merchants have invalid error_rate_pct"
+
+
+def test_card_testing_alerts_thresholds():
+    """card_testing_alerts must only return rows meeting the 3-txn / 2-merchant thresholds."""
+    invalid = query_scalar("""
+        SELECT COUNT(*) FROM mart.card_testing_alerts
+        WHERE txn_count < 3 OR distinct_merchants < 2
+    """)
+    assert invalid == 0, f"{invalid} alert rows violate the threshold conditions"
+
+
+def test_error_analysis_shares_sum_to_100():
+    """Error share percentages must sum to approximately 100."""
+    total = query_scalar("SELECT SUM(error_share_pct) FROM mart.error_analysis")
+    if total is not None:
+        assert 99.0 <= float(total) <= 101.0, \
+            f"error_share_pct sums to {total}, expected ~100"
+
+
+def test_error_analysis_no_null_error_type():
+    """error_analysis must not expose NULL error_type rows."""
+    nulls = query_scalar(
+        "SELECT COUNT(*) FROM mart.error_analysis WHERE error_type IS NULL"
+    )
+    assert nulls == 0, f"{nulls} rows in error_analysis have NULL error_type"

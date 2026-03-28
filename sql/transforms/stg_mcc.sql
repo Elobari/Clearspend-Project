@@ -25,7 +25,7 @@
 --   unusable — they can never join to transactions.mcc — and are written to
 --   raw.rejected by transform.py immediately after this script runs.
 --
--- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+-- AUTHOR:  Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================

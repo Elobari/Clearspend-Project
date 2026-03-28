@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearSpend — Architecture, Flow & ER Diagrams</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --navy: #0F172A;
+    --dark: #1E293B;
+    --teal: #0EA5E9;
+    --seafoam: #06B6D4;
+    --mint: #14B8A6;
+    --light: #F8FAFC;
+    --muted: #94A3B8;
+    --white: #FFFFFF;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--navy);
+    color: var(--white);
+    line-height: 1.6;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #0F172A 0%, #1a2f4e 50%, #0F172A 100%);
+    border-bottom: 2px solid var(--teal);
+    padding: 3rem 4rem;
+    text-align: center;
+  }
+
+  .header h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, var(--teal), var(--seafoam), var(--mint));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+  }
+
+  .header p {
+    color: var(--muted);
+    font-size: 1rem;
+  }
+
+  .nav {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: var(--dark);
+    border-bottom: 1px solid #334155;
+    flex-wrap: wrap;
+  }
+
+  .nav a {
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.5rem 1.5rem;
+    border-radius: 999px;
+    border: 1px solid #334155;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+
+  .nav a:hover {
+    color: var(--teal);
+    border-color: var(--teal);
+    background: rgba(14,165,233,0.08);
+  }
+
+  .section {
+    padding: 4rem;
+    border-bottom: 1px solid #1e293b;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .section-number {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--teal), var(--seafoam));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+
+  .section-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--white);
+  }
+
+  .section-subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-top: 0.2rem;
+  }
+
+  .diagram-card {
+    background: #1E293B;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 2rem;
+    overflow: auto;
+  }
+
+  /* ===== ARCHITECTURE SVG ===== */
+  .arch-container {
+    overflow: auto;
+  }
+
+  /* ===== MERMAID THEME OVERRIDE ===== */
+  .mermaid {
+    background: transparent !important;
+    text-align: center;
+  }
+
+  /* ===== ER DIAGRAM (custom SVG) ===== */
+  .er-container {
+    overflow: auto;
+  }
+
+  .er-table {
+    font-family: 'Segoe UI', monospace, sans-serif;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+    padding: 1rem 1.5rem;
+    background: #0F172A;
+    border-radius: 8px;
+    border: 1px solid #334155;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  footer {
+    text-align: center;
+    padding: 2rem;
+    color: #475569;
+    font-size: 0.85rem;
+    border-top: 1px solid #1e293b;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>ClearSpend Data Platform</h1>
+  <p>Architecture · Data Flow · Entity Relationship Diagram &nbsp;|&nbsp; Jonah Knief · Arthem Vysotskyi · Lyan Eleraky &nbsp;|&nbsp; Maastricht University</p>
+</div>
+
+<div class="nav">
+  <a href="#architecture">1. Architecture</a>
+  <a href="#dataflow">2. Data Flow</a>
+  <a href="#er">3. ER / Star Schema</a>
+</div>
+
+<!-- ====================================================== SECTION 1: ARCHITECTURE -->
+<div class="section" id="architecture">
+  <div class="section-header">
+    <div class="section-number">1</div>
+    <div>
+      <div class="section-title">Architecture Overview</div>
+      <div class="section-subtitle">Four-layer pipeline — each layer has a single responsibility and a dedicated test suite</div>
+    </div>
+  </div>
+
+  <div class="diagram-card">
+    <svg viewBox="0 0 960 560" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, system-ui, sans-serif">
+      <!-- Background gradient blocks for each layer -->
+      <!-- Layer 1 block -->
+      <rect x="20" y="40" width="200" height="480" rx="12" fill="#0c1a2e" stroke="#334155" stroke-width="1.5"/>
+      <!-- Layer 2 block -->
+      <rect x="250" y="40" width="200" height="480" rx="12" fill="#0c1a2e" stroke="#334155" stroke-width="1.5"/>
+      <!-- Layer 3 block -->
+      <rect x="480" y="40" width="200" height="480" rx="12" fill="#0c1a2e" stroke="#334155" stroke-width="1.5"/>
+      <!-- Layer 4 block -->
+      <rect x="710" y="40" width="230" height="480" rx="12" fill="#0c1a2e" stroke="#334155" stroke-width="1.5"/>
+
+      <!-- Layer headers -->
+      <rect x="20" y="40" width="200" height="48" rx="12" fill="#0e7490"/>
+      <rect x="20" y="76" width="200" height="12" rx="0" fill="#0e7490"/>
+      <text x="120" y="72" text-anchor="middle" fill="white" font-size="13" font-weight="700">Layer 1: Ingestion</text>
+
+      <rect x="250" y="40" width="200" height="48" rx="12" fill="#0d9488"/>
+      <rect x="250" y="76" width="200" height="12" rx="0" fill="#0d9488"/>
+      <text x="350" y="72" text-anchor="middle" fill="white" font-size="13" font-weight="700">Layer 2: Transform</text>
+
+      <rect x="480" y="40" width="200" height="48" rx="12" fill="#7c3aed"/>
+      <rect x="480" y="76" width="200" height="12" rx="0" fill="#7c3aed"/>
+      <text x="580" y="72" text-anchor="middle" fill="white" font-size="13" font-weight="700">Layer 3: Warehouse</text>
+
+      <rect x="710" y="40" width="230" height="48" rx="12" fill="#b45309"/>
+      <rect x="710" y="76" width="230" height="12" rx="0" fill="#b45309"/>
+      <text x="825" y="72" text-anchor="middle" fill="white" font-size="13" font-weight="700">Layer 4: Data Marts</text>
+
+      <!-- Layer 1 files -->
+      <text x="120" y="118" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">SOURCE FILES</text>
+      <rect x="40" y="128" width="160" height="30" rx="6" fill="#1e3a4a" stroke="#0e7490" stroke-width="1"/>
+      <text x="120" y="148" text-anchor="middle" fill="#7dd3fc" font-size="11">transactions_data.csv</text>
+      <rect x="40" y="165" width="160" height="30" rx="6" fill="#1e3a4a" stroke="#0e7490" stroke-width="1"/>
+      <text x="120" y="185" text-anchor="middle" fill="#7dd3fc" font-size="11">users_data.csv</text>
+      <rect x="40" y="202" width="160" height="30" rx="6" fill="#1e3a4a" stroke="#0e7490" stroke-width="1"/>
+      <text x="120" y="222" text-anchor="middle" fill="#7dd3fc" font-size="11">cards_data.csv</text>
+      <rect x="40" y="239" width="160" height="30" rx="6" fill="#1e3a4a" stroke="#0e7490" stroke-width="1"/>
+      <text x="120" y="259" text-anchor="middle" fill="#7dd3fc" font-size="11">mcc_data.csv</text>
+
+      <text x="120" y="295" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">RAW SCHEMA</text>
+      <rect x="40" y="302" width="160" height="26" rx="6" fill="#1e3a4a" stroke="#0e7490" stroke-width="1"/>
+      <text x="120" y="319" text-anchor="middle" fill="#bae6fd" font-size="11">raw.transactions</text>
+      <rect x="40" y="334" width="160" height="26" rx="6" fill="#1e3a4a" stroke="#0e7490" stroke-width="1"/>
+      <text x="120" y="351" text-anchor="middle" fill="#bae6fd" font-size="11">raw.users</text>
+      <rect x="40" y="366" width="160" height="26" rx="6" fill="#1e3a4a" stroke="#0e7490" stroke-width="1"/>
+      <text x="120" y="383" text-anchor="middle" fill="#bae6fd" font-size="11">raw.cards</text>
+      <rect x="40" y="398" width="160" height="26" rx="6" fill="#1e3a4a" stroke="#0e7490" stroke-width="1"/>
+      <text x="120" y="415" text-anchor="middle" fill="#bae6fd" font-size="11">raw.mcc</text>
+      <rect x="40" y="430" width="160" height="26" rx="6" fill="#1e3a4a" stroke="#b45309" stroke-width="1" stroke-dasharray="4,2"/>
+      <text x="120" y="447" text-anchor="middle" fill="#fcd34d" font-size="11">raw.rejected</text>
+
+      <!-- Layer 1 tool -->
+      <rect x="40" y="468" width="160" height="28" rx="6" fill="#164e63" stroke="#0e7490" stroke-width="1.5"/>
+      <text x="120" y="486" text-anchor="middle" fill="white" font-size="11" font-weight="600">ingest.py</text>
+
+      <!-- Layer 2 content -->
+      <text x="350" y="118" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">SQL TRANSFORMS</text>
+      <rect x="270" y="128" width="160" height="30" rx="6" fill="#1e3a3a" stroke="#0d9488" stroke-width="1"/>
+      <text x="350" y="148" text-anchor="middle" fill="#99f6e4" font-size="11">stg_mcc.sql</text>
+      <rect x="270" y="165" width="160" height="30" rx="6" fill="#1e3a3a" stroke="#0d9488" stroke-width="1"/>
+      <text x="350" y="185" text-anchor="middle" fill="#99f6e4" font-size="11">stg_users.sql</text>
+      <rect x="270" y="202" width="160" height="30" rx="6" fill="#1e3a3a" stroke="#0d9488" stroke-width="1"/>
+      <text x="350" y="222" text-anchor="middle" fill="#99f6e4" font-size="11">stg_cards.sql</text>
+      <rect x="270" y="239" width="160" height="30" rx="6" fill="#1e3a3a" stroke="#0d9488" stroke-width="1"/>
+      <text x="350" y="259" text-anchor="middle" fill="#99f6e4" font-size="11">stg_transactions.sql</text>
+
+      <text x="350" y="295" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">STAGING TABLES</text>
+      <rect x="270" y="302" width="160" height="26" rx="6" fill="#1e3a3a" stroke="#0d9488" stroke-width="1"/>
+      <text x="350" y="319" text-anchor="middle" fill="#a7f3d0" font-size="11">dw.stg_transactions</text>
+      <rect x="270" y="334" width="160" height="26" rx="6" fill="#1e3a3a" stroke="#0d9488" stroke-width="1"/>
+      <text x="350" y="351" text-anchor="middle" fill="#a7f3d0" font-size="11">dw.stg_users</text>
+      <rect x="270" y="366" width="160" height="26" rx="6" fill="#1e3a3a" stroke="#0d9488" stroke-width="1"/>
+      <text x="350" y="383" text-anchor="middle" fill="#a7f3d0" font-size="11">dw.stg_cards</text>
+      <rect x="270" y="398" width="160" height="26" rx="6" fill="#1e3a3a" stroke="#0d9488" stroke-width="1"/>
+      <text x="350" y="415" text-anchor="middle" fill="#a7f3d0" font-size="11">dw.stg_mcc</text>
+
+      <rect x="270" y="468" width="160" height="28" rx="6" fill="#134e4a" stroke="#0d9488" stroke-width="1.5"/>
+      <text x="350" y="486" text-anchor="middle" fill="white" font-size="11" font-weight="600">transform.py</text>
+
+      <!-- Layer 3 content -->
+      <text x="580" y="118" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">DIMENSIONS</text>
+      <rect x="500" y="128" width="160" height="26" rx="6" fill="#2d1b69" stroke="#7c3aed" stroke-width="1"/>
+      <text x="580" y="145" text-anchor="middle" fill="#c4b5fd" font-size="11">dw.dim_date</text>
+      <rect x="500" y="160" width="160" height="26" rx="6" fill="#2d1b69" stroke="#7c3aed" stroke-width="1"/>
+      <text x="580" y="177" text-anchor="middle" fill="#c4b5fd" font-size="11">dw.dim_customers (SCD2)</text>
+      <rect x="500" y="192" width="160" height="26" rx="6" fill="#2d1b69" stroke="#7c3aed" stroke-width="1"/>
+      <text x="580" y="209" text-anchor="middle" fill="#c4b5fd" font-size="11">dw.dim_cards</text>
+      <rect x="500" y="224" width="160" height="26" rx="6" fill="#2d1b69" stroke="#7c3aed" stroke-width="1"/>
+      <text x="580" y="241" text-anchor="middle" fill="#c4b5fd" font-size="11">dw.dim_merchants</text>
+
+      <text x="580" y="275" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">FACT</text>
+      <rect x="500" y="283" width="160" height="36" rx="6" fill="#2d1b69" stroke="#a78bfa" stroke-width="2"/>
+      <text x="580" y="304" text-anchor="middle" fill="#ede9fe" font-size="12" font-weight="700">dw.fact_transactions</text>
+      <text x="580" y="316" text-anchor="middle" fill="#a78bfa" font-size="10">13.3 M rows</text>
+
+      <text x="580" y="345" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">DDL FILES</text>
+      <rect x="500" y="353" width="160" height="26" rx="6" fill="#1a1038" stroke="#7c3aed" stroke-width="1"/>
+      <text x="580" y="370" text-anchor="middle" fill="#ddd6fe" font-size="10">01_raw_schema.sql</text>
+      <rect x="500" y="385" width="160" height="26" rx="6" fill="#1a1038" stroke="#7c3aed" stroke-width="1"/>
+      <text x="580" y="402" text-anchor="middle" fill="#ddd6fe" font-size="10">02_dw_schema.sql</text>
+      <rect x="500" y="417" width="160" height="26" rx="6" fill="#1a1038" stroke="#7c3aed" stroke-width="1"/>
+      <text x="580" y="434" text-anchor="middle" fill="#ddd6fe" font-size="10">03_mart_schema.sql</text>
+
+      <rect x="500" y="468" width="160" height="28" rx="6" fill="#3b0764" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="580" y="486" text-anchor="middle" fill="white" font-size="11" font-weight="600">warehouse.py</text>
+
+      <!-- Layer 4 content -->
+      <text x="825" y="118" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">FINANCE MART</text>
+      <rect x="730" y="128" width="190" height="22" rx="5" fill="#451a03" stroke="#b45309" stroke-width="1"/>
+      <text x="825" y="143" text-anchor="middle" fill="#fed7aa" font-size="10">finance_summary</text>
+      <rect x="730" y="156" width="190" height="22" rx="5" fill="#451a03" stroke="#b45309" stroke-width="1"/>
+      <text x="825" y="171" text-anchor="middle" fill="#fed7aa" font-size="10">finance_by_state / _location</text>
+      <rect x="730" y="184" width="190" height="22" rx="5" fill="#451a03" stroke="#b45309" stroke-width="1"/>
+      <text x="825" y="199" text-anchor="middle" fill="#fed7aa" font-size="10">finance_by_category / _zip</text>
+
+      <text x="825" y="225" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">CUSTOMER MART</text>
+      <rect x="730" y="232" width="190" height="22" rx="5" fill="#1c1917" stroke="#d97706" stroke-width="1"/>
+      <text x="825" y="247" text-anchor="middle" fill="#fde68a" font-size="10">customer_analytics</text>
+      <rect x="730" y="260" width="190" height="22" rx="5" fill="#1c1917" stroke="#d97706" stroke-width="1"/>
+      <text x="825" y="275" text-anchor="middle" fill="#fde68a" font-size="10">suspicious_transactions</text>
+      <rect x="730" y="288" width="190" height="22" rx="5" fill="#1c1917" stroke="#d97706" stroke-width="1"/>
+      <text x="825" y="303" text-anchor="middle" fill="#fde68a" font-size="10">card_testing_alerts</text>
+      <rect x="730" y="316" width="190" height="22" rx="5" fill="#1c1917" stroke="#d97706" stroke-width="1"/>
+      <text x="825" y="331" text-anchor="middle" fill="#fde68a" font-size="10">customers_without_txns</text>
+
+      <text x="825" y="357" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">MERCHANT MART</text>
+      <rect x="730" y="364" width="190" height="22" rx="5" fill="#1c1917" stroke="#f59e0b" stroke-width="1"/>
+      <text x="825" y="379" text-anchor="middle" fill="#fef3c7" font-size="10">merchant_summary</text>
+      <rect x="730" y="392" width="190" height="22" rx="5" fill="#1c1917" stroke="#f59e0b" stroke-width="1"/>
+      <text x="825" y="407" text-anchor="middle" fill="#fef3c7" font-size="10">merchant_category_growth</text>
+      <rect x="730" y="420" width="190" height="22" rx="5" fill="#1c1917" stroke="#f59e0b" stroke-width="1"/>
+      <text x="825" y="435" text-anchor="middle" fill="#fef3c7" font-size="10">error_analysis</text>
+
+      <rect x="730" y="468" width="190" height="28" rx="6" fill="#78350f" stroke="#b45309" stroke-width="1.5"/>
+      <text x="825" y="486" text-anchor="middle" fill="white" font-size="11" font-weight="600">marts.py</text>
+
+      <!-- Arrows between layers -->
+      <defs>
+        <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#475569"/>
+        </marker>
+      </defs>
+      <line x1="220" y1="280" x2="248" y2="280" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <line x1="450" y1="280" x2="478" y2="280" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <line x1="680" y1="280" x2="708" y2="280" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+      <!-- Pipeline entry point -->
+      <rect x="390" y="532" width="180" height="24" rx="12" fill="#1e40af" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="480" y="548" text-anchor="middle" fill="white" font-size="11" font-weight="700">pipeline.py (entry point)</text>
+    </svg>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#0e7490"></div> Layer 1 — Ingestion (raw schema)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0d9488"></div> Layer 2 — Transform (staging)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div> Layer 3 — Warehouse (star schema)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#b45309"></div> Layer 4 — Data Marts (views)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#b45309; border: 1px dashed #fcd34d"></div> Rejection table (audit log)</div>
+  </div>
+</div>
+
+
+<!-- ====================================================== SECTION 2: DATA FLOW -->
+<div class="section" id="dataflow">
+  <div class="section-header">
+    <div class="section-number">2</div>
+    <div>
+      <div class="section-title">Data Flow Diagram</div>
+      <div class="section-subtitle">End-to-end data journey from raw CSV exports to business-ready analytical views</div>
+    </div>
+  </div>
+
+  <div class="diagram-card">
+    <div class="mermaid">
+%%{init: {
+  'theme': 'dark',
+  'themeVariables': {
+    'background': '#1E293B',
+    'primaryColor': '#0e7490',
+    'primaryTextColor': '#ffffff',
+    'primaryBorderColor': '#334155',
+    'lineColor': '#475569',
+    'secondaryColor': '#0d9488',
+    'tertiaryColor': '#7c3aed',
+    'edgeLabelBackground': '#1E293B',
+    'clusterBkg': '#0F172A',
+    'clusterBorder': '#334155',
+    'titleColor': '#e2e8f0',
+    'fontFamily': 'Segoe UI, system-ui, sans-serif'
+  }
+}}%%
+flowchart TD
+    subgraph SRC["📂 SOURCE DATA (CSV Exports)"]
+        T[/"transactions_data.csv\n13.3M rows"/]
+        U[/"users_data.csv\n2,020 rows"/]
+        C[/"cards_data.csv\n6,207 rows"/]
+        M[/"mcc_data.csv\n127 rows"/]
+    end
+
+    subgraph L1["⬇️ LAYER 1 — INGESTION  (ingest.py)"]
+        direction TB
+        PK{"PK\nvalidation"}
+        COPY["PostgreSQL COPY\nbulk load"]
+        REJ["raw.rejected\n(audit log)"]
+        RT["raw.transactions"]
+        RU["raw.users"]
+        RC["raw.cards"]
+        RM["raw.mcc"]
+    end
+
+    subgraph L2["🔧 LAYER 2 — TRANSFORMATION  (transform.py + SQL)"]
+        direction LR
+        SM["stg_mcc.sql\nparse MCC codes"]
+        SU["stg_users.sql\nnormalise income,\ncanonical status"]
+        SC["stg_cards.sql\ncanonical brand,\nparse credit limit"]
+        ST["stg_transactions.sql\nstrip $, derive\nbooleans, date_sk"]
+    end
+
+    subgraph L3["🏛️ LAYER 3 — WAREHOUSE  (warehouse.py)"]
+        direction LR
+        DD["dim_date\n(pre-populated)"]
+        DC["dim_customers\n(SCD Type 2)"]
+        DCA["dim_cards"]
+        DM["dim_merchants\n(tx-derived)"]
+        FT["fact_transactions\n13.3M rows\n(server-side SQL INSERT)"]
+    end
+
+    subgraph L4["📊 LAYER 4 — DATA MARTS  (mart views)"]
+        direction LR
+        FIN["Finance Mart\nfinance_summary\nfinance_by_state\nfinance_by_category"]
+        CUST["Customer Mart\ncustomer_analytics\nsuspicious_transactions\ncard_testing_alerts"]
+        MERCH["Merchant Mart\nmerchant_summary\nmerchant_category_growth\nerror_analysis"]
+    end
+
+    subgraph TESTS["✅ PYTEST TEST SUITES (run after each layer)"]
+        direction LR
+        T1["test_ingestion.py\nrow counts · PK nulls"]
+        T2["test_transforms.py\ncanonical values · types"]
+        T3["test_warehouse.py\nSCD2 · ref. integrity"]
+        T4["test_marts.py\nsmoke tests · non-empty"]
+    end
+
+    T --> PK
+    U --> PK
+    C --> PK
+    M --> PK
+    PK -->|valid| COPY
+    PK -->|null PK| REJ
+    COPY --> RT & RU & RC & RM
+
+    RT --> ST
+    RU --> SU
+    RC --> SC
+    RM --> SM
+    SM --> ST
+
+    ST & SU & SC & SM --> DD & DC & DCA & DM
+    DD & DC & DCA & DM --> FT
+
+    FT --> FIN & CUST & MERCH
+
+    L1 --> T1
+    L2 --> T2
+    L3 --> T3
+    L4 --> T4
+
+    style SRC fill:#0c2438,stroke:#0e7490,color:#7dd3fc
+    style L1 fill:#0c2438,stroke:#0e7490,color:#e2e8f0
+    style L2 fill:#0c2e2e,stroke:#0d9488,color:#e2e8f0
+    style L3 fill:#1a0f3a,stroke:#7c3aed,color:#e2e8f0
+    style L4 fill:#2a1200,stroke:#b45309,color:#e2e8f0
+    style TESTS fill:#0f1f0f,stroke:#16a34a,color:#e2e8f0
+    style REJ fill:#2a1500,stroke:#b45309,color:#fcd34d
+    style FT fill:#2d1b69,stroke:#a78bfa,color:#ede9fe
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== SECTION 3: ER DIAGRAM -->
+<div class="section" id="er">
+  <div class="section-header">
+    <div class="section-number">3</div>
+    <div>
+      <div class="section-title">Entity Relationship Diagram — Star Schema</div>
+      <div class="section-subtitle">Classic Kimball star schema: one fact table (grain = 1 transaction) surrounded by 4 dimension tables</div>
+    </div>
+  </div>
+
+  <div class="diagram-card">
+    <svg viewBox="0 0 1100 800" width="100%" xmlns="http://www.w3.org/2000/svg"
+         font-family="'Consolas', 'Courier New', monospace">
+
+      <defs>
+        <marker id="fk" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed"/>
+        </marker>
+        <marker id="fk-date" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#0e7490"/>
+        </marker>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- ==================== FACT TABLE (centre) ==================== -->
+      <g id="fact">
+        <rect x="400" y="290" width="300" height="310" rx="10" fill="#1a0e3a" stroke="#a78bfa" stroke-width="2.5" filter="url(#glow)"/>
+        <!-- Header -->
+        <rect x="400" y="290" width="300" height="36" rx="10" fill="#7c3aed"/>
+        <rect x="400" y="315" width="300" height="11" fill="#7c3aed"/>
+        <text x="550" y="314" text-anchor="middle" fill="white" font-size="13" font-weight="700">dw.fact_transactions</text>
+        <text x="550" y="333" text-anchor="middle" fill="#c4b5fd" font-size="10">GRAIN: one row per transaction · 13.3M rows</text>
+
+        <!-- Columns -->
+        <text x="416" y="358" fill="#a78bfa" font-size="11" font-weight="700">🔑 transaction_sk</text>
+        <text x="680" y="358" text-anchor="end" fill="#64748b" font-size="10">SERIAL PK</text>
+        <line x1="414" y1="362" x2="685" y2="362" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="377" fill="#e2e8f0" font-size="11">   transaction_id</text>
+        <text x="680" y="377" text-anchor="end" fill="#64748b" font-size="10">BIGINT</text>
+        <line x1="414" y1="381" x2="685" y2="381" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="397" fill="#0ea5e9" font-size="11">🔗 date_sk</text>
+        <text x="680" y="397" text-anchor="end" fill="#64748b" font-size="10">INT FK → dim_date</text>
+        <line x1="414" y1="401" x2="685" y2="401" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="417" fill="#7c3aed" font-size="11">🔗 customer_sk</text>
+        <text x="680" y="417" text-anchor="end" fill="#64748b" font-size="10">INT FK → dim_customers</text>
+        <line x1="414" y1="421" x2="685" y2="421" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="437" fill="#7c3aed" font-size="11">🔗 card_sk</text>
+        <text x="680" y="437" text-anchor="end" fill="#64748b" font-size="10">INT FK → dim_cards</text>
+        <line x1="414" y1="441" x2="685" y2="441" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="457" fill="#7c3aed" font-size="11">🔗 merchant_sk</text>
+        <text x="680" y="457" text-anchor="end" fill="#64748b" font-size="10">INT FK → dim_merchants</text>
+        <line x1="414" y1="461" x2="685" y2="461" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <!-- separator -->
+        <line x1="414" y1="465" x2="685" y2="465" stroke="#7c3aed" stroke-width="1"/>
+        <text x="416" y="480" fill="#94a3b8" font-size="10" font-style="italic">MEASURES</text>
+
+        <text x="416" y="497" fill="#e2e8f0" font-size="11">   amount</text>
+        <text x="680" y="497" text-anchor="end" fill="#64748b" font-size="10">NUMERIC(12,2) always +</text>
+        <line x1="414" y1="501" x2="685" y2="501" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="517" fill="#e2e8f0" font-size="11">   is_refund</text>
+        <text x="680" y="517" text-anchor="end" fill="#64748b" font-size="10">BOOLEAN</text>
+        <line x1="414" y1="521" x2="685" y2="521" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="537" fill="#e2e8f0" font-size="11">   is_online</text>
+        <text x="680" y="537" text-anchor="end" fill="#64748b" font-size="10">BOOLEAN</text>
+        <line x1="414" y1="541" x2="685" y2="541" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="557" fill="#e2e8f0" font-size="11">   is_error</text>
+        <text x="680" y="557" text-anchor="end" fill="#64748b" font-size="10">BOOLEAN</text>
+        <line x1="414" y1="561" x2="685" y2="561" stroke="#2d1b69" stroke-width="0.5"/>
+
+        <text x="416" y="577" fill="#e2e8f0" font-size="11">   error_type</text>
+        <text x="680" y="577" text-anchor="end" fill="#64748b" font-size="10">VARCHAR(100)</text>
+      </g>
+
+      <!-- ==================== DIM_DATE (top centre) ==================== -->
+      <g id="dim_date">
+        <rect x="390" y="20" width="320" height="230" rx="10" fill="#0c1a2e" stroke="#0e7490" stroke-width="1.5"/>
+        <rect x="390" y="20" width="320" height="32" rx="10" fill="#0e7490"/>
+        <rect x="390" y="41" width="320" height="11" fill="#0e7490"/>
+        <text x="550" y="42" text-anchor="middle" fill="white" font-size="13" font-weight="700">dw.dim_date</text>
+        <text x="550" y="58" text-anchor="middle" fill="#bae6fd" font-size="10">Pre-populated 1900–2999 · YYYYMMDD surrogate key</text>
+
+        <text x="406" y="78" fill="#0ea5e9" font-size="11" font-weight="700">🔑 date_sk</text>
+        <text x="700" y="78" text-anchor="end" fill="#64748b" font-size="10">INT YYYYMMDD PK</text>
+        <line x1="404" y1="82" x2="702" y2="82" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="406" y="97" fill="#e2e8f0" font-size="11">   full_date</text>
+        <text x="700" y="97" text-anchor="end" fill="#64748b" font-size="10">DATE</text>
+        <line x1="404" y1="101" x2="702" y2="101" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="406" y="116" fill="#e2e8f0" font-size="11">   year / quarter / month</text>
+        <text x="700" y="116" text-anchor="end" fill="#64748b" font-size="10">SMALLINT</text>
+        <line x1="404" y1="120" x2="702" y2="120" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="406" y="135" fill="#e2e8f0" font-size="11">   month_name / day_name</text>
+        <text x="700" y="135" text-anchor="end" fill="#64748b" font-size="10">VARCHAR(10)</text>
+        <line x1="404" y1="139" x2="702" y2="139" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="406" y="154" fill="#e2e8f0" font-size="11">   iso_year / week</text>
+        <text x="700" y="154" text-anchor="end" fill="#64748b" font-size="10">SMALLINT (ISO 8601)</text>
+        <line x1="404" y1="158" x2="702" y2="158" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="406" y="173" fill="#e2e8f0" font-size="11">   day_of_month / day_of_week</text>
+        <text x="700" y="173" text-anchor="end" fill="#64748b" font-size="10">SMALLINT</text>
+        <line x1="404" y1="177" x2="702" y2="177" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="406" y="192" fill="#e2e8f0" font-size="11">   is_weekend</text>
+        <text x="700" y="192" text-anchor="end" fill="#64748b" font-size="10">BOOLEAN</text>
+        <line x1="404" y1="196" x2="702" y2="196" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="406" y="211" fill="#e2e8f0" font-size="11">   is_month_start / is_month_end</text>
+        <text x="700" y="211" text-anchor="end" fill="#64748b" font-size="10">BOOLEAN</text>
+      </g>
+
+      <!-- ==================== DIM_CUSTOMERS (left) ==================== -->
+      <g id="dim_customers">
+        <rect x="20" y="180" width="300" height="400" rx="10" fill="#0c1a2e" stroke="#0d9488" stroke-width="1.5"/>
+        <rect x="20" y="180" width="300" height="32" rx="10" fill="#0d9488"/>
+        <rect x="20" y="201" width="300" height="11" fill="#0d9488"/>
+        <text x="170" y="202" text-anchor="middle" fill="white" font-size="13" font-weight="700">dw.dim_customers</text>
+        <text x="170" y="218" text-anchor="middle" fill="#99f6e4" font-size="10">SCD Type 2 on income &amp; employment</text>
+
+        <text x="36" y="240" fill="#0d9488" font-size="11" font-weight="700">🔑 customer_sk</text>
+        <text x="310" y="240" text-anchor="end" fill="#64748b" font-size="10">SERIAL PK</text>
+        <line x1="34" y1="244" x2="312" y2="244" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="259" fill="#e2e8f0" font-size="11">   client_id</text>
+        <text x="310" y="259" text-anchor="end" fill="#64748b" font-size="10">INT (natural key)</text>
+        <line x1="34" y1="263" x2="312" y2="263" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="278" fill="#e2e8f0" font-size="11">   current_age / retirement_age</text>
+        <text x="310" y="278" text-anchor="end" fill="#64748b" font-size="10">SMALLINT</text>
+        <line x1="34" y1="282" x2="312" y2="282" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="297" fill="#e2e8f0" font-size="11">   birth_year / birth_month</text>
+        <text x="310" y="297" text-anchor="end" fill="#64748b" font-size="10">SMALLINT</text>
+        <line x1="34" y1="301" x2="312" y2="301" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="316" fill="#e2e8f0" font-size="11">   gender / address</text>
+        <text x="310" y="316" text-anchor="end" fill="#64748b" font-size="10">VARCHAR / TEXT</text>
+        <line x1="34" y1="320" x2="312" y2="320" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="335" fill="#e2e8f0" font-size="11">   latitude / longitude</text>
+        <text x="310" y="335" text-anchor="end" fill="#64748b" font-size="10">NUMERIC(9,6)</text>
+        <line x1="34" y1="339" x2="312" y2="339" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="354" fill="#e2e8f0" font-size="11">   per_capita_income</text>
+        <text x="310" y="354" text-anchor="end" fill="#64748b" font-size="10">NUMERIC(12,2)</text>
+        <line x1="34" y1="358" x2="312" y2="358" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="373" fill="#fbbf24" font-size="11">▸  yearly_income</text>
+        <text x="310" y="373" text-anchor="end" fill="#fbbf24" font-size="10">NUMERIC — SCD2</text>
+        <line x1="34" y1="377" x2="312" y2="377" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="392" fill="#e2e8f0" font-size="11">   total_debt / credit_score</text>
+        <text x="310" y="392" text-anchor="end" fill="#64748b" font-size="10">NUMERIC / SMALLINT</text>
+        <line x1="34" y1="396" x2="312" y2="396" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="411" fill="#fbbf24" font-size="11">▸  employment_status</text>
+        <text x="310" y="411" text-anchor="end" fill="#fbbf24" font-size="10">VARCHAR — SCD2</text>
+        <line x1="34" y1="415" x2="312" y2="415" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="430" fill="#e2e8f0" font-size="11">   education_level</text>
+        <text x="310" y="430" text-anchor="end" fill="#64748b" font-size="10">VARCHAR(20)</text>
+        <line x1="34" y1="434" x2="312" y2="434" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <line x1="34" y1="438" x2="312" y2="438" stroke="#0d9488" stroke-width="1"/>
+        <text x="36" y="453" fill="#94a3b8" font-size="10" font-style="italic">SCD Type 2 tracking</text>
+
+        <text x="36" y="470" fill="#e2e8f0" font-size="11">   valid_from / valid_to</text>
+        <text x="310" y="470" text-anchor="end" fill="#64748b" font-size="10">DATE</text>
+        <line x1="34" y1="474" x2="312" y2="474" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="489" fill="#e2e8f0" font-size="11">   is_current</text>
+        <text x="310" y="489" text-anchor="end" fill="#64748b" font-size="10">BOOLEAN</text>
+        <line x1="34" y1="493" x2="312" y2="493" stroke="#1e3a3a" stroke-width="0.5"/>
+
+        <text x="36" y="508" fill="#e2e8f0" font-size="11">   num_credit_cards</text>
+        <text x="310" y="508" text-anchor="end" fill="#64748b" font-size="10">SMALLINT</text>
+      </g>
+
+      <!-- ==================== DIM_CARDS (right) ==================== -->
+      <g id="dim_cards">
+        <rect x="780" y="180" width="300" height="380" rx="10" fill="#0c1a2e" stroke="#0ea5e9" stroke-width="1.5"/>
+        <rect x="780" y="180" width="300" height="32" rx="10" fill="#0369a1"/>
+        <rect x="780" y="201" width="300" height="11" fill="#0369a1"/>
+        <text x="930" y="202" text-anchor="middle" fill="white" font-size="13" font-weight="700">dw.dim_cards</text>
+        <text x="930" y="218" text-anchor="middle" fill="#bae6fd" font-size="10">Static — no SCD</text>
+
+        <text x="796" y="240" fill="#0ea5e9" font-size="11" font-weight="700">🔑 card_sk</text>
+        <text x="1070" y="240" text-anchor="end" fill="#64748b" font-size="10">SERIAL PK</text>
+        <line x1="794" y1="244" x2="1072" y2="244" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="259" fill="#e2e8f0" font-size="11">   card_id</text>
+        <text x="1070" y="259" text-anchor="end" fill="#64748b" font-size="10">BIGINT (natural key)</text>
+        <line x1="794" y1="263" x2="1072" y2="263" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="278" fill="#e2e8f0" font-size="11">   client_id</text>
+        <text x="1070" y="278" text-anchor="end" fill="#64748b" font-size="10">BIGINT</text>
+        <line x1="794" y1="282" x2="1072" y2="282" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="297" fill="#e2e8f0" font-size="11">   card_brand</text>
+        <text x="1070" y="297" text-anchor="end" fill="#64748b" font-size="10">Visa|Mastercard|Amex|…</text>
+        <line x1="794" y1="301" x2="1072" y2="301" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="316" fill="#e2e8f0" font-size="11">   card_type</text>
+        <text x="1070" y="316" text-anchor="end" fill="#64748b" font-size="10">Debit|Credit|Prepaid|…</text>
+        <line x1="794" y1="320" x2="1072" y2="320" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="335" fill="#e2e8f0" font-size="11">   card_number</text>
+        <text x="1070" y="335" text-anchor="end" fill="#64748b" font-size="10">VARCHAR(20)</text>
+        <line x1="794" y1="339" x2="1072" y2="339" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="354" fill="#e2e8f0" font-size="11">   credit_limit</text>
+        <text x="1070" y="354" text-anchor="end" fill="#64748b" font-size="10">NUMERIC(12,2)</text>
+        <line x1="794" y1="358" x2="1072" y2="358" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="373" fill="#e2e8f0" font-size="11">   expires / acct_open_date</text>
+        <text x="1070" y="373" text-anchor="end" fill="#64748b" font-size="10">DATE</text>
+        <line x1="794" y1="377" x2="1072" y2="377" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="392" fill="#e2e8f0" font-size="11">   has_chip / card_on_dark_web</text>
+        <text x="1070" y="392" text-anchor="end" fill="#64748b" font-size="10">BOOLEAN</text>
+        <line x1="794" y1="396" x2="1072" y2="396" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="411" fill="#e2e8f0" font-size="11">   issuer_bank_name / _state</text>
+        <text x="1070" y="411" text-anchor="end" fill="#64748b" font-size="10">VARCHAR</text>
+        <line x1="794" y1="415" x2="1072" y2="415" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="430" fill="#e2e8f0" font-size="11">   issuer_risk_rating</text>
+        <text x="1070" y="430" text-anchor="end" fill="#64748b" font-size="10">Low|Medium|High|…</text>
+        <line x1="794" y1="434" x2="1072" y2="434" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="449" fill="#e2e8f0" font-size="11">   cvv / num_cards_issued</text>
+        <text x="1070" y="449" text-anchor="end" fill="#64748b" font-size="10">INTEGER</text>
+        <line x1="794" y1="453" x2="1072" y2="453" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="468" fill="#e2e8f0" font-size="11">   year_pin_last_changed</text>
+        <text x="1070" y="468" text-anchor="end" fill="#64748b" font-size="10">INTEGER</text>
+        <line x1="794" y1="472" x2="1072" y2="472" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="487" fill="#e2e8f0" font-size="11">   issuer_bank_type</text>
+        <text x="1070" y="487" text-anchor="end" fill="#64748b" font-size="10">VARCHAR(50)</text>
+        <line x1="794" y1="491" x2="1072" y2="491" stroke="#1e3a5f" stroke-width="0.5"/>
+
+        <text x="796" y="506" fill="#e2e8f0" font-size="11">   num_cards_issued</text>
+        <text x="1070" y="506" text-anchor="end" fill="#64748b" font-size="10">INTEGER</text>
+      </g>
+
+      <!-- ==================== DIM_MERCHANTS (bottom centre) ==================== -->
+      <g id="dim_merchants">
+        <rect x="370" y="645" width="360" height="200" rx="10" fill="#0c1a2e" stroke="#d97706" stroke-width="1.5"/>
+        <rect x="370" y="645" width="360" height="32" rx="10" fill="#b45309"/>
+        <rect x="370" y="666" width="360" height="11" fill="#b45309"/>
+        <text x="550" y="667" text-anchor="middle" fill="white" font-size="13" font-weight="700">dw.dim_merchants</text>
+        <text x="550" y="683" text-anchor="middle" fill="#fed7aa" font-size="10">Derived from transactions · one row per merchant_id</text>
+
+        <text x="386" y="703" fill="#d97706" font-size="11" font-weight="700">🔑 merchant_sk</text>
+        <text x="720" y="703" text-anchor="end" fill="#64748b" font-size="10">SERIAL PK</text>
+        <line x1="384" y1="707" x2="722" y2="707" stroke="#2a1500" stroke-width="0.5"/>
+
+        <text x="386" y="722" fill="#e2e8f0" font-size="11">   merchant_id</text>
+        <text x="720" y="722" text-anchor="end" fill="#64748b" font-size="10">INT (natural key)</text>
+        <line x1="384" y1="726" x2="722" y2="726" stroke="#2a1500" stroke-width="0.5"/>
+
+        <text x="386" y="741" fill="#e2e8f0" font-size="11">   merchant_city / merchant_state</text>
+        <text x="720" y="741" text-anchor="end" fill="#64748b" font-size="10">TEXT</text>
+        <line x1="384" y1="745" x2="722" y2="745" stroke="#2a1500" stroke-width="0.5"/>
+
+        <text x="386" y="760" fill="#e2e8f0" font-size="11">   zip</text>
+        <text x="720" y="760" text-anchor="end" fill="#64748b" font-size="10">TEXT (5-char, NULL for online)</text>
+        <line x1="384" y1="764" x2="722" y2="764" stroke="#2a1500" stroke-width="0.5"/>
+
+        <text x="386" y="779" fill="#e2e8f0" font-size="11">   mcc_code / mcc_description</text>
+        <text x="720" y="779" text-anchor="end" fill="#64748b" font-size="10">INT / TEXT (denormalised)</text>
+        <line x1="384" y1="783" x2="722" y2="783" stroke="#2a1500" stroke-width="0.5"/>
+
+        <text x="386" y="798" fill="#e2e8f0" font-size="11">   merchant_location</text>
+        <text x="720" y="798" text-anchor="end" fill="#64748b" font-size="10">US | International | Online</text>
+      </g>
+
+      <!-- ==================== FK RELATIONSHIPS ==================== -->
+      <!-- fact → dim_date (top) -->
+      <path d="M550,290 L550,252" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#fk-date)" fill="none"/>
+      <text x="556" y="275" fill="#0ea5e9" font-size="9">date_sk</text>
+
+      <!-- fact → dim_customers (left) -->
+      <path d="M400,380 L322,380" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#fk)" fill="none" transform="rotate(180,361,380)"/>
+      <path d="M400,380 L322,380" stroke="#0d9488" stroke-width="1.5" stroke-dasharray="6,3" fill="none"/>
+      <polygon points="326,376 320,380 326,384" fill="#0d9488"/>
+      <text x="338" y="374" fill="#0d9488" font-size="9">customer_sk</text>
+
+      <!-- fact → dim_cards (right) -->
+      <path d="M700,380 L778,380" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="6,3" fill="none"/>
+      <polygon points="774,376 780,380 774,384" fill="#0ea5e9"/>
+      <text x="720" y="374" fill="#0ea5e9" font-size="9">card_sk</text>
+
+      <!-- fact → dim_merchants (bottom) -->
+      <path d="M550,600 L550,643" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6,3" fill="none"/>
+      <polygon points="546,639 550,645 554,639" fill="#d97706"/>
+      <text x="556" y="625" fill="#d97706" font-size="9">merchant_sk</text>
+
+      <!-- Legend -->
+      <rect x="20" y="700" width="320" height="80" rx="8" fill="#0F172A" stroke="#334155" stroke-width="1"/>
+      <text x="35" y="720" fill="#94a3b8" font-size="11" font-weight="600">LEGEND</text>
+      <line x1="35" y1="735" x2="75" y2="735" stroke="#a78bfa" stroke-width="2" stroke-dasharray="6,3"/>
+      <text x="85" y="739" fill="#94a3b8" font-size="10">Foreign key relationship</text>
+      <text x="35" y="758" fill="#fbbf24" font-size="10">▸ yellow column = SCD Type 2 tracked</text>
+      <text x="35" y="775" fill="#e2e8f0" font-size="10">🔑 = surrogate key (SERIAL)   🔗 = FK column</text>
+    </svg>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#0e7490"></div> dim_date</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0d9488"></div> dim_customers (SCD Type 2)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9"></div> dim_cards</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div> dim_merchants</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div> fact_transactions</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div> SCD Type 2 tracked columns</div>
+  </div>
+</div>
+
+<footer>
+  ClearSpend Data Platform · Jonah Knief · Arthem Vysotskyi · Lyan Eleraky · Maastricht University · Data Engineering &amp; Data Compliance
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    flowchart: { curve: 'basis', htmlLabels: true, useMaxWidth: true },
+    themeVariables: {
+      background: '#1E293B',
+      primaryColor: '#0e7490',
+      primaryTextColor: '#ffffff',
+      primaryBorderColor: '#334155',
+      lineColor: '#475569',
+      secondaryColor: '#0d9488',
+      tertiaryColor: '#7c3aed',
+      edgeLabelBackground: '#1E293B',
+      clusterBkg: '#0F172A',
+      clusterBorder: '#334155',
+      fontFamily: 'Segoe UI, system-ui, sans-serif'
+    }
+  });
+</script>
+</body>
+</html>

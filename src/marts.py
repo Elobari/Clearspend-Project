@@ -25,7 +25,7 @@ USAGE:
     python src/marts.py                    # run standalone
     called automatically by pipeline.py
 
-AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+AUTHOR:     Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """
@@ -33,8 +33,8 @@ UNIVERSITY: Maastricht University
 import os
 import sys
 import logging
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from sqlalchemy import text
+from db import engine
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -50,21 +50,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 log = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# DATABASE CONNECTION
-# ---------------------------------------------------------------------------
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
-
-DB_URL = (
-    f"postgresql+psycopg2://"
-    f"{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
-    f"@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}"
-    f"/{os.getenv('DB_NAME')}"
-)
-
-engine = create_engine(DB_URL, echo=False, connect_args={"client_encoding": "utf8"})
 
 DDL_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'sql', 'ddl', '03_mart_schema.sql'
@@ -153,6 +138,29 @@ SMOKE_TESTS = [
             "SELECT COUNT(*) AS rows, "
             "COUNT(*) FILTER (WHERE mom_growth_pct IS NULL) AS null_growth "
             "FROM mart.merchant_category_growth"
+        ),
+    },
+    {
+        "view":        "mart.customers_without_transactions",
+        "description": "Registered customers with no transaction history",
+        "query":       "SELECT COUNT(*) AS customers_no_txn FROM mart.customers_without_transactions",
+    },
+    {
+        "view":        "mart.card_testing_alerts",
+        "description": "Card testing pattern: 3+ small transactions across 2+ merchants in one day",
+        "query":       (
+            "SELECT COUNT(*) AS alerts, "
+            "COUNT(DISTINCT client_id) AS flagged_customers "
+            "FROM mart.card_testing_alerts"
+        ),
+    },
+    {
+        "view":        "mart.error_analysis",
+        "description": "Error type breakdown from fact_transactions.error_type",
+        "query":       (
+            "SELECT COUNT(*) AS error_types, "
+            "SUM(error_count) AS total_errors "
+            "FROM mart.error_analysis"
         ),
     },
 ]

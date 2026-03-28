@@ -11,7 +11,7 @@ Tests verify:
     - dim_merchants has no duplicate merchant_ids
     - Referential integrity: every FK in fact_transactions resolves to a dimension row
 
-AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+AUTHOR:     Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """
@@ -46,7 +46,7 @@ def test_dim_customers_row_count():
 
 
 def test_dim_cards_row_count():
-    """dim_cards must have exactly 6,207 rows (one per source card)."""
+    """dim_cards must have exactly 6,146 rows (6,207 source cards minus 61 duplicates removed at warehouse load)."""
     count = query_scalar("SELECT COUNT(*) FROM dw.dim_cards")
     assert count == 6146, f"Expected 6146 cards, got {count}"
 
@@ -58,9 +58,9 @@ def test_dim_merchants_row_count():
 
 
 def test_dim_date_row_count():
-    """dim_date must cover 2000-01-01 to 2035-12-31 (~13,149 days)."""
+    """dim_date must cover 1900-01-01 to 2999-12-31 (~401,770 days)."""
     count = query_scalar("SELECT COUNT(*) FROM dw.dim_date")
-    assert count >= 13149, f"dim_date has only {count} rows — expected >= 13149"
+    assert count >= 400000, f"dim_date has only {count} rows — expected ~401770"
 
 
 def test_fact_transactions_row_count():

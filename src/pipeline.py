@@ -26,7 +26,7 @@ FAILURE BEHAVIOUR:
     Re-running the full pipeline from scratch is always safe — all DDL uses
     DROP ... CASCADE before recreating schemas.
 
-AUTHOR:     Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+AUTHOR:     Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """
@@ -35,8 +35,6 @@ import logging
 import os
 import sys
 import time
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # ENCODING — force UTF-8 on all platforms.
@@ -66,6 +64,7 @@ def run_tests(test_file: str) -> None:
     Called after each layer to catch data quality regressions immediately
     rather than letting bad data silently propagate downstream.
     """
+    import pytest
     test_path = os.path.join(_TESTS_DIR, test_file)
     log.info(f"  Running tests: {test_file}")
     exit_code = pytest.main([test_path, "-q", "--tb=short"])

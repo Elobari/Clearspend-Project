@@ -21,7 +21,7 @@
 --   4. FOREIGN KEYS: All FK constraints are defined to enforce referential
 --      integrity between fact and dimension tables.
 --
--- AUTHOR:  Jonah Knief (i6263747) | Artem Vysotskyi (...) | Lyan Eleraky (...) | Loredana Lazari
+-- AUTHOR:  Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
 -- COURSE:  Data Engineering and Data Compliance
 -- UNI:     Maastricht University
 -- =============================================================================
@@ -207,12 +207,37 @@ CREATE TABLE dw.dim_merchants (
     mcc_code            INTEGER,
     mcc_description     TEXT,
     merchant_location   VARCHAR(15) NOT NULL DEFAULT 'US'
-        CHECK (merchant_location IN ('US', 'International', 'Online'))
+        CHECK (merchant_location IN ('US', 'International', 'Online', 'Unknown'))
     );
  
 CREATE UNIQUE INDEX idx_dim_merchants_id ON dw.dim_merchants (merchant_id);
 CREATE INDEX idx_dim_merchants_zip       ON dw.dim_merchants (zip);
 CREATE INDEX idx_dim_merchants_state     ON dw.dim_merchants (merchant_state);
+
+
+-- =============================================================================
+-- SENTINEL ROWS (sk = -1)
+--
+-- warehouse.py uses COALESCE(sk, -1) when inserting fact_transactions so that
+-- fact rows with no matching dimension record are preserved rather than dropped.
+-- Because fact_transactions has FK constraints on all four dimension SKs, -1
+-- must physically exist in each dimension table — otherwise the INSERT would
+-- raise a foreign-key violation.
+--
+-- These rows are inserted with explicitly supplied pk values (-1), bypassing
+-- the SERIAL sequence. They will never appear in mart views unless a fact row
+-- genuinely has no matching customer/card/merchant (which this dataset verifies
+-- does not happen — the COALESCE path is effectively unreachable).
+-- =============================================================================
+
+INSERT INTO dw.dim_customers (customer_sk, client_id, valid_from, is_current)
+VALUES (-1, -1, '1900-01-01', FALSE);
+
+INSERT INTO dw.dim_cards (card_sk, card_id, client_id)
+VALUES (-1, -1, -1);
+
+INSERT INTO dw.dim_merchants (merchant_sk, merchant_id, merchant_location)
+VALUES (-1, -1, 'Unknown');
 
 
 -- =============================================================================
@@ -251,7 +276,7 @@ CREATE TABLE dw.fact_transactions (
     -- Measures
     amount              NUMERIC(12,2) NOT NULL,     -- Always positive after cleaning
     is_refund           BOOLEAN       NOT NULL DEFAULT FALSE,  -- TRUE if source amount < 0
-    is_online           BOOLEAN       NOT NULL DEFAULT FALSE,  -- TRUE if use_chip = 'Online Transaction' or merchant_city = 'ONLINE' ???
+    is_online           BOOLEAN       NOT NULL DEFAULT FALSE,  -- TRUE if use_chip = 'Online Transaction' (see stg_transactions.sql)
     is_error            BOOLEAN       NOT NULL DEFAULT FALSE,  -- TRUE if errors column was populated
     error_type          VARCHAR(100)                -- Normalised error category, NULL if clean 
     );
@@ -265,3 +290,18 @@ CREATE INDEX idx_fact_merchant_sk ON dw.fact_transactions (merchant_sk);
 -- Composite index for the most common analytical query pattern:
 -- filtering by customer over a date range
 CREATE INDEX idx_fact_customer_date ON dw.fact_transactions (customer_sk, date_sk);
+
+-- Composite index for merchant temporal queries (e.g. merchant_category_growth
+-- which groups by merchant_sk and date_sk for month-over-month revenue)
+CREATE INDEX idx_fact_merchant_date ON dw.fact_transactions (merchant_sk, date_sk);
+
+-- Partial index: most mart views filter is_refund = FALSE. A partial index on
+-- date_sk covering only non-refund rows lets the planner skip refund rows
+-- entirely, giving faster scans on the 13M-row fact table.
+CREATE INDEX idx_fact_date_sales ON dw.fact_transactions (date_sk)
+    WHERE is_refund = FALSE;
+
+-- Partial index: error analysis queries always filter is_error = TRUE.
+-- Only ~5% of rows are errors, so this is far cheaper than a full-table scan.
+CREATE INDEX idx_fact_errors ON dw.fact_transactions (error_type)
+    WHERE is_error = TRUE;
