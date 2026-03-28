@@ -34,7 +34,7 @@ USAGE:
     python src/transform.py                # run standalone
     called automatically by pipeline.py
 
-AUTHOR:     Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
+AUTHOR:     Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky (I6320604) | Loredana Lazari (I6346545)
 COURSE:     Data Engineering and Data Compliance
 UNIVERSITY: Maastricht University
 """

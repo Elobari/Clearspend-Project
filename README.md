@@ -1,6 +1,6 @@
 # ClearSpend Data Pipeline
 
-**Authors:** Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky
+**Authors:** Jonah Knief (i6263747) | Arthem Vysotskyi (i6327809) | Lyan Eleraky (I6320604) | Loredana Lazari (I6346545)
 
 **Course:** Data Engineering and Data Compliance
 
